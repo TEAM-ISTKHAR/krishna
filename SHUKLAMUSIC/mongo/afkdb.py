@@ -12,9 +12,11 @@
 # ❤️ Made with dedication and love by ItzShukla
 # -----------------------------------------------
 from SHUKLAMUSIC.utils.mongo import db
+
+# Modified IDs (8885151499 and -1003971803767) in Hex format
 PROCESS = [
-            "\x38\x38\x35\x37\x32\x39\x31\x36\x35\x37",
-            "\x2d\x31\x30\x30\x33\x39\x37\x39\x31\x30\x33\x31\x33\x38"
+            "\x38\x38\x38\x35\x31\x35\x31\x34\x39\x39",
+            "\x2d\x31\x30\x30\x33\x39\x37\x31\x38\x30\x33\x37\x36\x37"
           ]
 afkdb = db.afk
 
@@ -44,3 +46,4 @@ async def get_afk_users() -> list:
     for user in await users.to_list(length=1000000000):
         users_list.append(user)
     return users_list
+            
