@@ -20,7 +20,7 @@ def clean_username(name: str) -> str:
     import re
 
     if not name:
-        return "kirtiUser"
+        return "IstkharUser"
 
     # normalize
     name = unicodedata.normalize("NFKC", name)
@@ -532,7 +532,7 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
         fill=c_base,
         anchor="lm"
     )
-    draw.text((1255, 45), "Dev | BADNAM",                                          font=f_wm,  fill=TEXT_WHITE, anchor="rd")
+    draw.text((1255, 45), "Dev | ALEXX",                                          font=f_wm,  fill=TEXT_WHITE, anchor="rd")
 
     base.save(output, "PNG", optimize=True)
 
