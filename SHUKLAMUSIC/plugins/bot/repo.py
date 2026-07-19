@@ -22,14 +22,14 @@ def e(eid, fb):
     return f'<emoji id={eid}>{fb}</emoji>'
 
 start_txt = (
-    f"{e(_E_STAR,'🌟')} {e(_E_GLOW,'🤩')} <b>ᴋɪʀᴛɪ ᴍᴜsɪᴄ | ʙᴀᴅɴᴀᴍ</b> {e(_E_GLOW,'🤩')} {e(_E_STAR,'🌟')}\n\n"
+    f"{e(_E_STAR,'🌟')} {e(_E_GLOW,'🤩')} <b>ᴍɪᴋᴀsᴀ ᴍᴜsɪᴄ | ɪsᴛᴋʜᴀʀ</b> {e(_E_GLOW,'🤩')} {e(_E_STAR,'🌟')}\n\n"
     f"{e(_E_SPARK,'✨')} ʙᴀᴅᴀ ᴀᴀʏᴀ ʙᴏᴛ sᴛᴀᴛs ᴅᴇᴋʜɴᴇ,\n"
     f"{e(_E_LOVE,'💗')} ᴘᴀʜʟᴇ ᴀᴘɴɪ ʟɪɢᴇ ᴋᴇ sᴛᴀᴛs sᴜᴅʜᴀʀ ᴊᴀᴀᴋᴇ !\n\n"
     f"<pre>||{e(_E_RIGHT,'➡️')} ᴜᴩᴛɪᴍᴇ       :  𝟷ʜ:𝟹𝟺ᴍ:𝟻𝟺s\n"
     f"{e(_E_RIGHT,'➡️')} sᴛᴏʀᴀɢᴇ      :  𝟸𝟽.𝟺%\n"
     f"{e(_E_RIGHT,'➡️')} ᴄᴩᴜ ʟᴏᴀᴅ    :  𝟷𝟷.𝟸%\n"
     f"{e(_E_RIGHT,'➡️')} ʀᴀᴍ ᴜsᴇ     :  𝟷𝟽.𝟻%||</pre>\n\n"
-    f"{e(_E_ROSE,'🌹')} ᴘᴏᴡєʀєᴅ ʙʏ» <a href=\"https://t.me/pyxd_ll\">ʙᴀᴅɴᴀɴ ⌯</a>\n"
+    f"{e(_E_ROSE,'🌹')} ᴘᴏᴡєʀєᴅ ʙʏ» <a href=\"https://t.me/ll_alexx_lll\">ᴀʟᴇxx ⌯</a>\n"
     f"{e(_E_BOUQ,'💐')} {e(_E_FLOWER,'🌸')} {e(_E_RIBBON,'🎀')} {e(_E_HEART,'❤️')}"
 )
 
@@ -40,13 +40,13 @@ async def start(_, msg):
         [
             InlineKeyboardButton(
                 text="˹ηєᴛᴡᴏʀᴋ˼",
-                url="https://t.me/annu_updates",
+                url="https://t.me/TuneBots",
                 style=ButtonStyle.PRIMARY,
                 icon_custom_emoji_id=_E_STAR,
             ),
             InlineKeyboardButton(
                 text="˹ϻʏ ʜᴏϻє˼",
-                url="https://t.me/annu_updates",
+                url="https://t.me/betabot_hub",
                 style=ButtonStyle.SUCCESS,
                 icon_custom_emoji_id=_E_FLOWER,
             ),
@@ -54,7 +54,7 @@ async def start(_, msg):
         [
             InlineKeyboardButton(
                 text="˹ ϻʏ ϻᴧsᴛєʀ ˼ 👑",
-                url="https://t.me/Pyxd_ll",
+                url="https://t.me/ll_alexx_lll",
                 style=ButtonStyle.DANGER,
                 icon_custom_emoji_id=_E_GLOW,
             ),
@@ -62,7 +62,7 @@ async def start(_, msg):
     ]
 
     await msg.reply_photo(
-        photo="https://i.ibb.co/rRXc8MGR/image.jpg",
+        photo="https://d.uguu.se/nGpQVVqm.jpg",
         caption=start_txt,
         reply_markup=InlineKeyboardMarkup(buttons),
     )
