@@ -287,7 +287,6 @@ class Call(PyTgCalls):
             await assistant.leave_call(chat_id, close=False)
         except Exception:
             pass
-
     async def skip_stream(
         self,
         chat_id: int,
@@ -351,6 +350,7 @@ class Call(PyTgCalls):
             users = len(await assistant.get_participants(chat_id))
             if users == 1:
                 autoend[chat_id] = datetime.now() + timedelta(minutes=1)
+
     async def change_stream(self, client: PyTgCalls, chat_id: int):
         check = db.get(chat_id)
         popped = None
@@ -363,7 +363,6 @@ class Call(PyTgCalls):
                 await set_loop(chat_id, loop)
             await auto_clean(popped)
 
-            # --- MAIN AUTOPLAY LOGIC EXECUTION ---
             if not check:
                 try:
                     is_autoplay = await get_autoplay(chat_id)
@@ -380,7 +379,6 @@ class Call(PyTgCalls):
 
                         if not related:
                             try:
-                                # 🟢 ADVANCED SPOTIFY-STYLE SEARCH ALGORITHM
                                 raw_title = popped.get("title", "Unknown Title")
                                 title_lower = str(raw_title).lower()
                                 last_vidid = str(vidid)
@@ -419,31 +417,10 @@ class Call(PyTgCalls):
                                         "fazilpuria", "gajender phogat", "vikas kumar", "raj mawar", "surender romio", 
                                         "ruchika jangid", "anu kadyan", "diler kharkiya", "kd desi rock", "ajay hooda", 
                                         "danjal", "anjali raghav"
-                                    ],
-                                    "Tamil": [
-                                        "anirudh", "ar rahman", "yuvan shankar raja", "sid sriram", "harris jayaraj", 
-                                        "ilaiyaraaja", "spb", "s p balasubrahmanyam", "k s chithra", "sujatha", 
-                                        "karthik", "vijay prakash", "benny dayal", "haricharan", "d imman", 
-                                        "g v prakash", "santhosh narayanan", "vidyasagar", "deva", "pradeep kumar", 
-                                        "sean roldan", "chinmayi", "shweta mohan", "hariharan", "naresh iyer"
-                                    ],
-                                    "Telugu": [
-                                        "devi sri prasad", "dsp", "thaman", "sid sriram", "anurag kulkarni", "mangli", 
-                                        "mm keeravani", "mani sharma", "s p balasubrahmanyam", "k s chithra", "sunitha", 
-                                        "geetha madhuri", "rahul sipligunj", "ram miriyala", "mickey j meyer", 
-                                        "gopi sundar", "s p b charan", "singer smita", "karthik", "hemanth", "inno genga"
-                                    ],
-                                    "English": [
-                                        "taylor swift", "justin bieber", "ed sheeran", "ariana grande", "the weeknd", 
-                                        "drake", "eminem", "billie eilish", "dua lipa", "post malone", "harry styles", 
-                                        "selena gomez", "bruno mars", "maroon 5", "coldplay", "imagine dragons", 
-                                        "rihanna", "beyonce", "adele", "lady gaga", "katy perry", "shawn mendes", 
-                                        "charlie puth", "olivia rodrigo", "doja cat", "lil nas x", "kendrick lamar", 
-                                        "j cole", "travis scott", "miley cyrus", "shakira", "david guetta", "calvin harris"
                                     ]
                                 }
 
-                                ignore_artist_kws = ["hindi", "punjabi", "bhojpuri", "haryanvi", "tamil", "telugu", "english"]
+                                ignore_artist_kws = ["hindi", "punjabi", "bhojpuri", "haryanvi"]
                                 detected_lang = None
                                 detected_artist = None
                                 detected_mood = None
@@ -533,12 +510,13 @@ class Call(PyTgCalls):
                         else:
                             self.autoplay_failures[chat_id] = 0
 
+                            # ✅ YAHAN "ʀєǫυєsᴛєʀ : Spotify Radio 🟢" ADD KIYA HAI
                             db[chat_id].append(
                                 {
                                     "vidid": related["vidid"],
                                     "file": f"vid_{related['vidid']}",
                                     "title": related["title"],
-                                    "by": "Autoplay",
+                                    "by": "ʀєǫυєsᴛєʀ : Spotify Radio 🟢",
                                     "chat_id": popped.get("chat_id", chat_id),
                                     "streamtype": "audio",
                                     "dur": related.get("duration", "Unknown"),
@@ -554,7 +532,6 @@ class Call(PyTgCalls):
                                 )
                                 asyncio.create_task(_delete_msg(notice, 6))
 
-                                # 👉 YOUR ORIGINAL LOGGER PRESERVED HERE 👈
                                 if hasattr(config, "LOG_GROUP_ID") and config.LOG_GROUP_ID:
                                     matched_title = popped.get("title", "Unknown Track")[:45]
                                     log_text = (
@@ -567,13 +544,11 @@ class Call(PyTgCalls):
                                     await app.send_message(config.LOG_GROUP_ID, log_text, disable_web_page_preview=True)
                             except Exception:
                                 pass
-            # -------------------------------------
 
             if not check:
                 self.clear_autoplay(chat_id)
                 await _clear_(chat_id)
                 return await client.leave_call(chat_id, close=False)
-
         except Exception:
             try:
                 self.clear_autoplay(chat_id)
@@ -581,7 +556,6 @@ class Call(PyTgCalls):
                 return await client.leave_call(chat_id, close=False)
             except Exception:
                 return
-
         queued = check[0]["file"]
         language = await get_lang(chat_id)
         _ = get_string(language)
@@ -698,54 +672,54 @@ class Call(PyTgCalls):
                     original_chat_id,
                     text=_["call_6"],
                 )
-                            if videoid == "telegram":
-                    button = stream_markup(_, chat_id)
-                    run = await app.send_photo(
-                        chat_id=original_chat_id,
-                        photo=(
-                            config.TELEGRAM_VIDEO_URL
-                            if video
-                            else config.TELEGRAM_AUDIO_URL
-                        ),
-                        caption=_["stream_1"].format(
-                            config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
-                        ),
-                        reply_markup=InlineKeyboardMarkup(button),
-                    )
-                    db[chat_id][0]["mystic"] = run
-                    db[chat_id][0]["markup"] = "tg"
-                elif videoid == "soundcloud":
-                    button = stream_markup(_, chat_id)
-                    run = await app.send_photo(
-                        chat_id=original_chat_id,
-                        photo=(
-                            config.TELEGRAM_VIDEO_URL
-                            if video
-                            else config.SOUNCLOUD_IMG_URL
-                        ),
-                        caption=_["stream_1"].format(
-                            config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
-                        ),
-                        reply_markup=InlineKeyboardMarkup(button),
-                    )
-                    db[chat_id][0]["mystic"] = run
-                    db[chat_id][0]["markup"] = "tg"
-                else:
-                    img = await gen_thumb(videoid)
-                    button = stream_markup(_, chat_id)
-                    run = await app.send_photo(
-                        chat_id=original_chat_id,
-                        photo=img,
-                        caption=_["stream_1"].format(
-                            f"https://t.me/{app.username}?start=info_{videoid}",
-                            title[:23],
-                            check[0]["dur"],
-                            user,
-                        ),
-                        reply_markup=InlineKeyboardMarkup(button),
-                    )
-                    db[chat_id][0]["mystic"] = run
-                    db[chat_id][0]["markup"] = "stream"
+            if videoid == "telegram":
+                button = stream_markup(_, chat_id)
+                run = await app.send_photo(
+                    chat_id=original_chat_id,
+                    photo=(
+                        config.TELEGRAM_VIDEO_URL
+                        if video
+                        else config.TELEGRAM_AUDIO_URL
+                    ),
+                    caption=_["stream_1"].format(
+                        config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
+                    ),
+                    reply_markup=InlineKeyboardMarkup(button),
+                )
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "tg"
+            elif videoid == "soundcloud":
+                button = stream_markup(_, chat_id)
+                run = await app.send_photo(
+                    chat_id=original_chat_id,
+                    photo=(
+                        config.TELEGRAM_VIDEO_URL
+                        if video
+                        else config.SOUNCLOUD_IMG_URL
+                    ),
+                    caption=_["stream_1"].format(
+                        config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
+                    ),
+                    reply_markup=InlineKeyboardMarkup(button),
+                )
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "tg"
+            else:
+                img = await gen_thumb(videoid)
+                button = stream_markup(_, chat_id)
+                run = await app.send_photo(
+                    chat_id=original_chat_id,
+                    photo=img,
+                    caption=_["stream_1"].format(
+                        f"https://t.me/{app.username}?start=info_{videoid}",
+                        title[:23],
+                        check[0]["dur"],
+                        user,
+                    ),
+                    reply_markup=InlineKeyboardMarkup(button),
+                )
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "stream"
 
     async def ping(self):
         pings = []
@@ -787,4 +761,3 @@ class Call(PyTgCalls):
         if getattr(config, "STRING5", None): self.five.on_update()(stream_handler)
 
 SHUKLA = Call()
-                                                          
