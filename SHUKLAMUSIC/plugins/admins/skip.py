@@ -83,8 +83,8 @@ async def skip(cli, message: Message, _, chat_id):
                                         )
                                         await SHUKLA.stop_stream(chat_id)
                                     except:
-                                        return
-                                    break
+                                        pass
+                                    return
                     else:
                         return await message.reply_text(_["admin_11"].format(count))
                 else:
@@ -156,7 +156,11 @@ async def skip(cli, message: Message, _, chat_id):
                 return await SHUKLA.stop_stream(chat_id)
             except:
                 return
-    
+
+    check = db.get(chat_id)
+    if not check:
+        return
+
     queued = check[0]["file"]
     title = (check[0]["title"]).title()
     user = check[0]["by"]
@@ -196,8 +200,10 @@ async def skip(cli, message: Message, _, chat_id):
             ),
             reply_markup=InlineKeyboardMarkup(button),
         )
-        db[chat_id][0]["mystic"] = run
-        db[chat_id][0]["markup"] = "tg"
+        if db.get(chat_id):
+            db[chat_id][0]["mystic"] = run
+            db[chat_id][0]["markup"] = "tg"
+            
     elif "vid_" in queued:
         mystic = await message.reply_text(_["call_7"], disable_web_page_preview=True)
         try:
@@ -229,9 +235,11 @@ async def skip(cli, message: Message, _, chat_id):
             ),
             reply_markup=InlineKeyboardMarkup(button),
         )
-        db[chat_id][0]["mystic"] = run
-        db[chat_id][0]["markup"] = "stream"
+        if db.get(chat_id):
+            db[chat_id][0]["mystic"] = run
+            db[chat_id][0]["markup"] = "stream"
         await mystic.delete()
+        
     elif "index_" in queued:
         try:
             await SHUKLA.skip_stream(chat_id, videoid, video=status)
@@ -243,8 +251,10 @@ async def skip(cli, message: Message, _, chat_id):
             caption=_["stream_2"].format(user),
             reply_markup=InlineKeyboardMarkup(button),
         )
-        db[chat_id][0]["mystic"] = run
-        db[chat_id][0]["markup"] = "tg"
+        if db.get(chat_id):
+            db[chat_id][0]["mystic"] = run
+            db[chat_id][0]["markup"] = "tg"
+            
     else:
         if videoid == "telegram":
             image = None
@@ -259,6 +269,7 @@ async def skip(cli, message: Message, _, chat_id):
             await SHUKLA.skip_stream(chat_id, queued, video=status, image=image)
         except:
             return await message.reply_text(_["call_6"])
+            
         if videoid == "telegram":
             button = stream_markup(_, chat_id)
             run = await message.reply_photo(
@@ -270,8 +281,9 @@ async def skip(cli, message: Message, _, chat_id):
                 ),
                 reply_markup=InlineKeyboardMarkup(button),
             )
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "tg"
+            if db.get(chat_id):
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "tg"
         elif videoid == "soundcloud":
             button = stream_markup(_, chat_id)
             run = await message.reply_photo(
@@ -283,8 +295,9 @@ async def skip(cli, message: Message, _, chat_id):
                 ),
                 reply_markup=InlineKeyboardMarkup(button),
             )
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "tg"
+            if db.get(chat_id):
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "tg"
         else:
             button = stream_markup(_, chat_id)
             img = await get_thumb(videoid)
@@ -298,5 +311,6 @@ async def skip(cli, message: Message, _, chat_id):
                 ),
                 reply_markup=InlineKeyboardMarkup(button),
             )
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "stream"
+            if db.get(chat_id):
+                db[chat_id][0]["mystic"] = run
+                db[chat_id][0]["markup"] = "stream"
