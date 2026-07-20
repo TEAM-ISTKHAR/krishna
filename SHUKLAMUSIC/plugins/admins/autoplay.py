@@ -9,8 +9,8 @@ from pyrogram.types import (
 )
 from pyrogram.errors import MessageNotModified
 
-from PritiMusic import app
-from PritiMusic.utils.database.autoplay import (
+from SHUKLAMUSIC import app
+from SHUKLAMUSIC.utils.database.autoplay import (
     is_autoplay_group,
     add_autoplay_group,
     remove_autoplay_group,
