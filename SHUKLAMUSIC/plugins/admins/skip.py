@@ -1,13 +1,13 @@
 import asyncio
 import logging
 from pyrogram import filters
-from pyrogram.types import InlineKeyboardMarkup, Message, CallbackQuery
+from pyrogram.types import InlineKeyboardMarkup, Message
 
 import config
 from SHUKLAMUSIC import YouTube, app
 from SHUKLAMUSIC.core.call import SHUKLA
 from SHUKLAMUSIC.misc import db
-from SHUKLAMUSIC.utils.database import get_loop, get_autoplay, set_autoplay
+from SHUKLAMUSIC.utils.database import get_loop, get_autoplay
 from SHUKLAMUSIC.utils.decorators import AdminRightsCheck
 from SHUKLAMUSIC.utils.inline import close_markup, stream_markup, stream_markup_timer
 from SHUKLAMUSIC.utils.stream.autoclear import auto_clean
@@ -73,11 +73,9 @@ async def skip(cli, message: Message, _, chat_id):
                                                 "seconds": related.get("duration_sec", 0),
                                             })
                                             short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
-                                            
-                                            # ✅ PREMIUM EMOJI APPLIED HERE
                                             notice = await app.send_message(
                                                 chat_id, 
-                                                f"<blockquote><emoji id=\"5204046146955153467\">▶️</emoji> <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n<emoji id=\"6271653280187684816\">🎧</emoji> <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
+                                                f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
                                                 disable_web_page_preview=True
                                             )
                                             # ✅ Deletes message in exactly 6 seconds
@@ -136,11 +134,9 @@ async def skip(cli, message: Message, _, chat_id):
                                 "seconds": related.get("duration_sec", 0),
                             })
                             short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
-                            
-                            # ✅ PREMIUM EMOJI APPLIED HERE
                             notice = await app.send_message(
                                 chat_id, 
-                                f"<blockquote><emoji id=\"5204046146955153467\">▶️</emoji> <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n<emoji id=\"6271653280187684816\">🎧</emoji> <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
+                                f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
                                 disable_web_page_preview=True
                             )
                             # ✅ Deletes message in exactly 6 seconds
@@ -194,10 +190,7 @@ async def skip(cli, message: Message, _, chat_id):
     # ✅ FIX: Yahan par automatically decide hoga ki Timer dikhana hai ya normal button
     dur = check[0].get("dur", "0:00")
     if dur == "Unknown" or dur == "0:00":
-        try:
-            dynamic_button = stream_markup(_, chat_id)
-        except:
-            dynamic_button = stream_markup_timer(_, chat_id, "00:00", dur)
+        dynamic_button = stream_markup(_, chat_id)
     else:
         dynamic_button = stream_markup_timer(_, chat_id, "00:00", dur)
         
@@ -337,20 +330,3 @@ async def skip(cli, message: Message, _, chat_id):
             if db.get(chat_id):
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "stream"
-
-# ── 🟢 AUTOPLAY BUTTON CALLBACK HANDLER ──
-# (Is code se aapka player wala Autoplay Button zinda ho jayega)
-@app.on_callback_query(filters.regex(r"^ADMIN Autoplay\|(.*)") & ~BANNED_USERS)
-@AdminRightsCheck
-async def autoplay_button_handler(client, query: CallbackQuery, _, chat_id):
-    try:
-        is_autoplay = await get_autoplay(chat_id)
-        
-        if is_autoplay:
-            await set_autoplay(chat_id, False)
-            await query.answer("🔴 Autoplay Disabled! (Agla gaana nahi chalega)", show_alert=True)
-        else:
-            await set_autoplay(chat_id, True)
-            await query.answer("🟢 Autoplay Enabled! (Agla gaana automatically chalega)", show_alert=True)
-    except Exception as e:
-        await query.answer("Kuch error aa gaya!", show_alert=False)
