@@ -44,13 +44,20 @@ from strings import get_string
 checker = {}
 upvoters = {}
 
+# ── 6 Second Auto Delete Function ──
+async def _delete_msg(message, delay: int = 6):
+    try:
+        await asyncio.sleep(delay)
+        await message.delete()
+    except Exception:
+        pass
 
 
 @app.on_callback_query(filters.regex("unban_assistant"))
 async def unban_assistant(_, callback: CallbackQuery):
     chat_id = callback.message.chat.id
     userbot = await get_assistant(chat_id)
-    
+
     try:
         await app.unban_chat_member(chat_id, userbot.id)
         await callback.answer("𝗠𝘆 𝗔𝘀𝘀𝗶𝘀𝘁𝗮𝗻𝘁 𝗜𝗱 𝗨𝗻𝗯𝗮𝗻𝗻𝗲𝗱 𝗦𝘂𝗰𝗰𝗲𝘀𝘀𝗳𝘂𝗹𝗹𝘆🥳\n\n➻ 𝗡𝗼𝘄 𝗬𝗼𝘂 𝗖𝗮𝗻 𝗣𝗹𝗮𝘆 𝗦𝗼𝗻𝗴𝘀🔉\n\n𝗧𝗵𝗮𝗻𝗸 𝗬𝗼𝘂💝", show_alert=True)
@@ -72,6 +79,7 @@ async def del_back_playlist(client, CallbackQuery, _):
     if not await is_active_chat(chat_id):
         return await CallbackQuery.answer(_["general_5"], show_alert=True)
     mention = CallbackQuery.from_user.mention
+    
     if command == "UpVote":
         if chat_id not in votemode:
             votemode[chat_id] = {}
@@ -150,20 +158,10 @@ async def del_back_playlist(client, CallbackQuery, _):
                         return await CallbackQuery.answer(
                             _["admin_14"], show_alert=True
                         )
-    
-        # ── 🟢 AUTOPLAY BUTTON HANDLER (PREMIUM EMOJIS KE SATH) ──
-@app.on_callback_query(filters.regex(r"ADMIN Autoplay") & ~BANNED_USERS)
-async def autoplay_button_handler(client, query: CallbackQuery):
-    chat_id = int(query.data.split("|")[1])
-    is_autoplay = await get_autoplay(chat_id)
 
-    if is_autoplay:
-        await set_autoplay(chat_id, False)
-        await query.answer("🔴 Autoplay Disabled! (Agla gaana nahi chalega)", show_alert=True)
-    else:
-        await set_autoplay(chat_id, True)
-        await query.answer("🟢 Autoplay Enabled! (Agla gaana automatically chalega)", show_alert=True)
- CallbackQuery.answer(_["admin_1"], show_alert=True)
+    if command == "Pause":
+        if not await is_music_playing(chat_id):
+            return await CallbackQuery.answer(_["admin_1"], show_alert=True)
         await CallbackQuery.answer()
         await music_off(chat_id)
         await SHUKLA.pause_stream(chat_id)
@@ -196,6 +194,42 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                 popped = check.pop(0)
                 if popped:
                     await auto_clean(popped)
+                
+                # --- 🚀 INLINE AUTOPLAY TRIGGER LOGIC ---
+                if not check:
+                    try:
+                        is_autoplay = await get_autoplay(chat_id)
+                    except:
+                        is_autoplay = False
+                    
+                    if is_autoplay and popped and popped.get("vidid") not in ["telegram", "soundcloud", None]:
+                        try:
+                            vidid = popped["vidid"]
+                            related = await YouTube.get_related(vidid, [])
+                            if related:
+                                db[chat_id].append({
+                                    "vidid": related["vidid"],
+                                    "file": f"vid_{related['vidid']}",
+                                    "title": related["title"],
+                                    "by": "Autoplay",
+                                    "chat_id": chat_id,
+                                    "streamtype": "audio",
+                                    "dur": related.get("duration", "Unknown"),
+                                    "seconds": related.get("duration_sec", 0),
+                                })
+                                short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
+                                notice = await app.send_message(
+                                    chat_id, 
+                                    f"<blockquote><emoji id=\"5204046146955153467\">▶️</emoji> <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n<emoji id=\"6271653280187684816\">🎧</emoji> <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
+                                    disable_web_page_preview=True
+                                )
+                                asyncio.create_task(_delete_msg(notice, 6))
+                        except Exception:
+                            pass
+                            
+                check = db.get(chat_id) # Re-check after Autoplay attempts
+                # ----------------------------------------
+                
                 if not check:
                     await CallbackQuery.edit_message_text(
                         f"➻ sᴛʀᴇᴀᴍ sᴋɪᴩᴩᴇᴅ 🎄\n│ \n└ʙʏ : {mention} 🥀"
@@ -226,6 +260,7 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                     return
         else:
             txt = f"➻ sᴛʀᴇᴀᴍ ʀᴇ-ᴘʟᴀʏᴇᴅ 🎄\n│ \n└ʙʏ : {mention} 🥀"
+            
         await CallbackQuery.answer()
         queued = check[0]["file"]
         title = (check[0]["title"]).title()
@@ -236,11 +271,23 @@ async def autoplay_button_handler(client, query: CallbackQuery):
         status = True if str(streamtype) == "video" else None
         db[chat_id][0]["played"] = 0
         exis = (check[0]).get("old_dur")
+        
         if exis:
             db[chat_id][0]["dur"] = exis
             db[chat_id][0]["seconds"] = check[0]["old_second"]
             db[chat_id][0]["speed_path"] = None
             db[chat_id][0]["speed"] = 1.0
+
+        # ✅ DYNAMIC TIMER LOGIC APPLIED HERE
+        dur = check[0].get("dur", "0:00")
+        if dur == "Unknown" or dur == "0:00":
+            try:
+                dynamic_button = stream_markup(_, chat_id)
+            except:
+                dynamic_button = stream_markup_timer(_, chat_id, "00:00", dur)
+        else:
+            dynamic_button = stream_markup_timer(_, chat_id, "00:00", dur)
+
         if "live_" in queued:
             n, link = await YouTube.video(videoid, True)
             if n == 0:
@@ -256,6 +303,7 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                 await SHUKLA.skip_stream(chat_id, link, video=status, image=image)
             except:
                 return await CallbackQuery.message.reply_text(_["call_6"])
+                
             button = stream_markup(_, chat_id)
             img = await get_thumb(videoid)
             run = await CallbackQuery.message.reply_photo(
@@ -271,6 +319,7 @@ async def autoplay_button_handler(client, query: CallbackQuery):
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
+            
         elif "vid_" in queued:
             mystic = await CallbackQuery.message.reply_text(
                 _["call_7"], disable_web_page_preview=True
@@ -292,7 +341,7 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                 await SHUKLA.skip_stream(chat_id, file_path, video=status, image=image)
             except:
                 return await mystic.edit_text(_["call_6"])
-            button = stream_markup(_, chat_id)
+                
             img = await get_thumb(videoid)
             run = await CallbackQuery.message.reply_photo(
                 photo=img,
@@ -302,26 +351,28 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                     duration,
                     user,
                 ),
-                reply_markup=InlineKeyboardMarkup(button),
+                reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "stream"
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
             await mystic.delete()
+            
         elif "index_" in queued:
             try:
                 await SHUKLA.skip_stream(chat_id, videoid, video=status)
             except:
                 return await CallbackQuery.message.reply_text(_["call_6"])
-            button = stream_markup(_, chat_id)
+            
             run = await CallbackQuery.message.reply_photo(
                 photo=STREAM_IMG_URL,
                 caption=_["stream_2"].format(user),
-                reply_markup=InlineKeyboardMarkup(button),
+                reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
+            
         else:
             if videoid == "telegram":
                 image = None
@@ -336,8 +387,8 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                 await SHUKLA.skip_stream(chat_id, queued, video=status, image=image)
             except:
                 return await CallbackQuery.message.reply_text(_["call_6"])
+                
             if videoid == "telegram":
-                button = stream_markup(_, chat_id)
                 run = await CallbackQuery.message.reply_photo(
                     photo=TELEGRAM_AUDIO_URL
                     if str(streamtype) == "audio"
@@ -345,12 +396,11 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                     caption=_["stream_1"].format(
                         config.SUPPORT_CHAT, title[:23], duration, user
                     ),
-                    reply_markup=InlineKeyboardMarkup(button),
+                    reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
                 )
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "tg"
             elif videoid == "soundcloud":
-                button = stream_markup(_, chat_id)
                 run = await CallbackQuery.message.reply_photo(
                     photo=SOUNCLOUD_IMG_URL
                     if str(streamtype) == "audio"
@@ -358,12 +408,11 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                     caption=_["stream_1"].format(
                         config.SUPPORT_CHAT, title[:23], duration, user
                     ),
-                    reply_markup=InlineKeyboardMarkup(button),
+                    reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
                 )
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "tg"
             else:
-                button = stream_markup(_, chat_id)
                 img = await get_thumb(videoid)
                 run = await CallbackQuery.message.reply_photo(
                     photo=img,
@@ -373,11 +422,24 @@ async def autoplay_button_handler(client, query: CallbackQuery):
                         duration,
                         user,
                     ),
-                    reply_markup=InlineKeyboardMarkup(button),
+                    reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
                 )
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "stream"
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
+
+# ── 🟢 AUTOPLAY BUTTON HANDLER ──
+@app.on_callback_query(filters.regex(r"ADMIN Autoplay") & ~BANNED_USERS)
+async def autoplay_button_handler(client, query: CallbackQuery):
+    chat_id = int(query.data.split("|")[1])
+    is_autoplay = await get_autoplay(chat_id)
+
+    if is_autoplay:
+        await set_autoplay(chat_id, False)
+        await query.answer("🔴 Autoplay Disabled! (Agla gaana nahi chalega)", show_alert=True)
+    else:
+        await set_autoplay(chat_id, True)
+        await query.answer("🟢 Autoplay Enabled! (Agla gaana automatically chalega)", show_alert=True)
 
 
 async def markup_timer():
@@ -422,6 +484,5 @@ async def markup_timer():
                     continue
             except:
                 continue
-
 
 asyncio.create_task(markup_timer())
