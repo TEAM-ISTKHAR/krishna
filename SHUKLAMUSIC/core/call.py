@@ -1,25 +1,15 @@
-# -----------------------------------------------
-# 🔸 StrangerMusic Project
-# 🔹 Developed & Maintained by: Shashank Shukla (https://github.com/itzshukla)
-# 📅 Copyright © 2022 – All Rights Reserved
-#
-# 📖 License:
-# This source code is open for educational and non-commercial use ONLY.
-# You are required to retain this credit in all copies or substantial portions of this file.
-# Commercial use, redistribution, or removal of this notice is strictly prohibited
-# without prior written permission from the author.
-#
-# ❤️ Made with dedication and love by ItzShukla
-# -----------------------------------------------
 import asyncio
 import os
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Union
+
 from ntgcalls import ConnectionNotFound, TelegramServerError
 from pyrogram import Client
 from pyrogram.types import InlineKeyboardMarkup
 from pytgcalls import PyTgCalls, exceptions, types
 from pytgcalls.pytgcalls_session import PyTgCallsSession
+
 import config
 from SHUKLAMUSIC import LOGGER, YouTube, app
 from SHUKLAMUSIC.misc import db
@@ -34,6 +24,7 @@ from SHUKLAMUSIC.utils.database import (
     remove_active_chat,
     remove_active_video_chat,
     set_loop,
+    get_autoplay,  # Ensure get_autoplay exists in your database utils
 )
 from SHUKLAMUSIC.utils.exceptions import AssistantErr
 from SHUKLAMUSIC.utils.formatters import check_duration, seconds_to_min, speed_converter
@@ -45,6 +36,13 @@ from strings import get_string
 autoend = {}
 counter = {}
 
+async def _delete_msg(msg, delay: int = 6):
+    try:
+        await asyncio.sleep(delay)
+        await msg.delete()
+    except Exception:
+        pass
+
 async def _clear_(chat_id: int):
     db[chat_id] = []
     await remove_active_video_chat(chat_id)
@@ -53,6 +51,13 @@ async def _clear_(chat_id: int):
 class Call(PyTgCalls):
     def __init__(self):
         PyTgCallsSession.notice_displayed = True
+
+        # --- Autoplay Variables Integration ---
+        self.history: dict[int, list[str]] = defaultdict(list)
+        self.pending_autoplay = {}
+        self.autoplay_prefetching = set()
+        self.autoplay_failures = defaultdict(int)
+        # --------------------------------------
 
         self.userbot1 = Client(
             name="SHUKLAAss1",
@@ -94,14 +99,47 @@ class Call(PyTgCalls):
         )
         self.five = PyTgCalls(self.userbot5, cache_duration=100)
 
+    # --- Autoplay Prefetch & Cleanup Methods ---
+    def clear_autoplay(self, chat_id: int):
+        self.autoplay_failures[chat_id] = 0
+        self.pending_autoplay.pop(chat_id, None)
+        self.autoplay_prefetching.discard(chat_id)
+        self.history.pop(chat_id, None)
+
+    async def _prefetch_next(self, chat_id: int) -> None:
+        if chat_id in self.autoplay_prefetching:
+            return
+        self.autoplay_prefetching.add(chat_id)
+        try:
+            await asyncio.sleep(3)
+            check = db.get(chat_id)
+            if check and len(check) > 1:
+                return  # Queue already has upcoming tracks
+            
+            is_autoplay = await get_autoplay(chat_id)
+            if is_autoplay and check:
+                current_vidid = check[0].get("vidid")
+                if current_vidid and current_vidid not in ["telegram", "soundcloud"]:
+                    try:
+                        # Assumes YouTube.get_related exists in SHUKLAMUSIC. 
+                        # Return format expected: dict with vidid, title, duration, duration_sec
+                        related = await YouTube.get_related(current_vidid, self.history[chat_id])
+                        if related:
+                            self.pending_autoplay[chat_id] = related
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        finally:
+            self.autoplay_prefetching.discard(chat_id)
+    # -------------------------------------------
+
     def _build_stream(
         self,
         source: str,
         video: bool,
         ffmpeg: str | None = None,
     ) -> types.MediaStream:
-        # Always pass -threads 0 so ffmpeg uses all available cores for
-        # decode/encode — reduces CPU bottleneck and streaming stutter.
         base_flags = "-threads 0"
         combined = f"{base_flags} {ffmpeg}" if ffmpeg else base_flags
         return types.MediaStream(
@@ -129,6 +167,8 @@ class Call(PyTgCalls):
                 stream=stream,
                 config=types.GroupCallConfig(auto_start=False),
             )
+            # Trigger prefetch asynchronously whenever a new song starts playing
+            asyncio.create_task(self._prefetch_next(chat_id))
         except exceptions.NoActiveGroupCall:
             raise
         except exceptions.NoAudioSourceFound:
@@ -149,6 +189,7 @@ class Call(PyTgCalls):
     async def stop_stream(self, chat_id: int):
         assistant = await group_assistant(self, chat_id)
         try:
+            self.clear_autoplay(chat_id)
             await _clear_(chat_id)
             await assistant.leave_call(chat_id, close=False)
         except Exception:
@@ -169,6 +210,7 @@ class Call(PyTgCalls):
             except Exception:
                 pass
         try:
+            self.clear_autoplay(chat_id)
             await _clear_(chat_id)
         except Exception:
             pass
@@ -238,6 +280,7 @@ class Call(PyTgCalls):
             check.pop(0)
         except Exception:
             pass
+        self.clear_autoplay(chat_id)
         await remove_active_video_chat(chat_id)
         await remove_active_chat(chat_id)
         try:
@@ -320,15 +363,87 @@ class Call(PyTgCalls):
                 loop = loop - 1
                 await set_loop(chat_id, loop)
             await auto_clean(popped)
+            
+            # --- MAIN AUTOPLAY LOGIC EXECUTION ---
             if not check:
+                try:
+                    is_autoplay = await get_autoplay(chat_id)
+                except Exception:
+                    is_autoplay = False
+
+                if is_autoplay and popped:
+                    vidid = popped.get("vidid")
+                    if vidid and vidid not in ["telegram", "soundcloud"]:
+                        self.history[chat_id].append(vidid)
+                        del self.history[chat_id][:-20]  # Keep history limited to 20
+                        
+                        related = self.pending_autoplay.pop(chat_id, None)
+                        
+                        if not related:
+                            try:
+                                related = await YouTube.get_related(vidid, self.history[chat_id])
+                            except Exception:
+                                related = None
+                                
+                        if not related:
+                            self.autoplay_failures[chat_id] += 1
+                            if self.autoplay_failures[chat_id] >= 4:
+                                try:
+                                    await app.send_message(chat_id, "⚠️ Autoplay failed 4 times. Stopping stream.")
+                                except: pass
+                        else:
+                            self.autoplay_failures[chat_id] = 0
+                            
+                            # Append related track properties back to dictionary (queue)
+                            db[chat_id].append(
+                                {
+                                    "vidid": related["vidid"],
+                                    "file": f"vid_{related['vidid']}", # Triggers internal YT download logic below
+                                    "title": related["title"],
+                                    "by": "Autoplay",
+                                    "chat_id": popped.get("chat_id", chat_id),
+                                    "streamtype": "audio",
+                                    "dur": related.get("duration", "Unknown"),
+                                    "seconds": related.get("duration_sec", 0),
+                                }
+                            )
+                            # Autoplay Alerts & Logging
+                            try:
+                                short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
+                                notice = await app.send_message(
+                                    chat_id, 
+                                    f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Nᴇxᴛ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
+                                    disable_web_page_preview=True
+                                )
+                                asyncio.create_task(_delete_msg(notice, 6))
+                                
+                                if hasattr(config, "LOG_GROUP_ID") and config.LOG_GROUP_ID:
+                                    matched_title = popped.get("title", "Unknown Track")[:45]
+                                    log_text = (
+                                        f"<blockquote><b>🔁 AUTO-PLAY TRACK STARTED</b>\n\n"
+                                        f"<b>🥀 GROUP :</b> {chat_id}\n"
+                                        f"<b>🎵 PLAYING :</b> <a href='https://youtube.com/watch?v={related['vidid']}'>{short_title}</a>\n"
+                                        f"<b>🔗 MATCHED WITH :</b> {matched_title}\n"
+                                        f"<b>⏭ UPCOMING :</b> Autoplay will decide next...</blockquote>"
+                                    )
+                                    await app.send_message(config.LOG_GROUP_ID, log_text, disable_web_page_preview=True)
+                            except Exception:
+                                pass
+            # -------------------------------------
+            
+            if not check:
+                self.clear_autoplay(chat_id)
                 await _clear_(chat_id)
                 return await client.leave_call(chat_id, close=False)
+                
         except Exception:
             try:
+                self.clear_autoplay(chat_id)
                 await _clear_(chat_id)
                 return await client.leave_call(chat_id, close=False)
             except Exception:
                 return
+
         queued = check[0]["file"]
         language = await get_lang(chat_id)
         _ = get_string(language)
@@ -339,12 +454,15 @@ class Call(PyTgCalls):
         videoid = check[0]["vidid"]
         db[chat_id][0]["played"] = 0
         exis = (check[0]).get("old_dur")
+        
         if exis:
             db[chat_id][0]["dur"] = exis
             db[chat_id][0]["seconds"] = check[0]["old_second"]
             db[chat_id][0]["speed_path"] = None
             db[chat_id][0]["speed"] = 1.0
+            
         video = True if str(streamtype) == "video" else False
+        
         if "live_" in queued:
             n, link = await YouTube.video(videoid, True)
             if n == 0:
@@ -375,6 +493,7 @@ class Call(PyTgCalls):
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
+            
         elif "vid_" in queued:
             mystic = await app.send_message(original_chat_id, _["call_7"])
             try:
@@ -391,7 +510,7 @@ class Call(PyTgCalls):
             stream = self._build_stream(file_path, video=video)
             try:
                 await self._play_on_assistant(client, chat_id, stream)
-            except Exception:
+                        except Exception:
                 return await app.send_message(
                     original_chat_id,
                     text=_["call_6"],
@@ -536,3 +655,5 @@ class Call(PyTgCalls):
                         await self.stop_stream(update.chat_id)
 
 SHUKLA = Call()
+
+              
