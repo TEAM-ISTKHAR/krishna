@@ -715,3 +715,33 @@ async def remove_card(cc: str):
     if not is_exist:
         return
     return await cardsdb.delete_one({"cc": cc})
+
+
+# --- AUTOPLAY DATABASE FUNCTIONS ---
+autoplaydb = mongodb["autoplay"]
+
+async def is_autoplay(chat_id: int) -> bool:
+    chat = await autoplaydb.find_one({"chat_id": chat_id})
+    if not chat:
+        return False
+    return True
+
+async def get_autoplay(chat_id: int) -> bool:
+    return await is_autoplay(chat_id)
+
+async def set_autoplay(chat_id: int, state: bool):
+    if state:
+        await autoplaydb.update_one(
+            {"chat_id": chat_id}, 
+            {"$set": {"chat_id": chat_id}}, 
+            upsert=True
+        )
+    else:
+        await autoplaydb.delete_one({"chat_id": chat_id})
+
+async def autoplay_on(chat_id: int):
+    await set_autoplay(chat_id, True)
+
+async def autoplay_off(chat_id: int):
+    await set_autoplay(chat_id, False)
+
