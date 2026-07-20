@@ -310,11 +310,12 @@ class YouTubeAPI:
         try:
             import re
             import random
+            from youtubesearchpython.__future__ import VideosSearch
 
-            search_query = "latest trending songs" # Default fallback
+            search_query = "latest trending hindi songs" # Default solid fallback
             
             try:
-                curr_info = VideosSearch(vidid, limit=1)
+                curr_info = VideosSearch(f"https://www.youtube.com/watch?v={vidid}", limit=1)
                 curr_res = (await curr_info.next()).get("result")
                 
                 if curr_res and len(curr_res) > 0:
@@ -335,24 +336,29 @@ class YouTubeAPI:
             response = await results.next()
             
             if not response or not response.get("result"):
-                results = VideosSearch("latest hit hindi songs", limit=15)
+                results = VideosSearch("top 50 hit hindi songs", limit=15)
                 response = await results.next()
 
             if not response or not response.get("result"):
                 return None
 
             tracks = response["result"]
-            random.shuffle(tracks) 
+            random.shuffle(tracks) # Mix karein taaki repeat na ho
 
             for track in tracks:
                 track_id = track.get("id")
                 if track_id and track_id not in history and track_id != vidid:
-                    duration_min = track.get("duration", "0:00")
+                    duration_min = track.get("duration")
                     
+                    # 🔴 BUG FIX: Agar duration None hai toh next song pakdo
+                    if not duration_min or not isinstance(duration_min, str):
+                        continue
+                        
+                    # 12 minute se bade videos/podcasts ko auto-reject karein
                     if duration_min.count(":") > 1 or (duration_min.count(":") == 1 and int(duration_min.split(":")[0]) > 12):
                         continue
                         
-                    duration_sec = int(time_to_seconds(duration_min)) if duration_min else 0
+                    duration_sec = int(time_to_seconds(duration_min))
                     return {
                         "vidid": track_id,
                         "title": track.get("title", "Unknown Track"),
@@ -360,7 +366,8 @@ class YouTubeAPI:
                         "duration_sec": duration_sec
                     }
             return None
-        except Exception:
+        except Exception as e:
+            LOGGER.error(f"Autoplay Error: {e}")
             return None
 
     async def exists(self, link: str, videoid: Union[bool, str] = None):
