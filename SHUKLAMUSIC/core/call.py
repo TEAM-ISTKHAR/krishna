@@ -24,7 +24,7 @@ from SHUKLAMUSIC.utils.database import (
     remove_active_chat,
     remove_active_video_chat,
     set_loop,
-    get_autoplay,  # Ensure get_autoplay exists in your database utils
+    get_autoplay,
 )
 from SHUKLAMUSIC.utils.exceptions import AssistantErr
 from SHUKLAMUSIC.utils.formatters import check_duration, seconds_to_min, speed_converter
@@ -36,6 +36,7 @@ from strings import get_string
 autoend = {}
 counter = {}
 
+
 async def _delete_msg(msg, delay: int = 6):
     try:
         await asyncio.sleep(delay)
@@ -43,21 +44,23 @@ async def _delete_msg(msg, delay: int = 6):
     except Exception:
         pass
 
+
 async def _clear_(chat_id: int):
     db[chat_id] = []
     await remove_active_video_chat(chat_id)
     await remove_active_chat(chat_id)
 
+
 class Call(PyTgCalls):
     def __init__(self):
         PyTgCallsSession.notice_displayed = True
 
-        # --- Autoplay Variables Integration ---
+        # --- Autoplay Variables ---
         self.history: dict[int, list[str]] = defaultdict(list)
         self.pending_autoplay = {}
         self.autoplay_prefetching = set()
         self.autoplay_failures = defaultdict(int)
-        # --------------------------------------
+        # --------------------------
 
         self.userbot1 = Client(
             name="SHUKLAAss1",
@@ -99,7 +102,6 @@ class Call(PyTgCalls):
         )
         self.five = PyTgCalls(self.userbot5, cache_duration=100)
 
-    # --- Autoplay Prefetch & Cleanup Methods ---
     def clear_autoplay(self, chat_id: int):
         self.autoplay_failures[chat_id] = 0
         self.pending_autoplay.pop(chat_id, None)
@@ -114,15 +116,13 @@ class Call(PyTgCalls):
             await asyncio.sleep(3)
             check = db.get(chat_id)
             if check and len(check) > 1:
-                return  # Queue already has upcoming tracks
+                return
             
             is_autoplay = await get_autoplay(chat_id)
             if is_autoplay and check:
                 current_vidid = check[0].get("vidid")
                 if current_vidid and current_vidid not in ["telegram", "soundcloud"]:
                     try:
-                        # Assumes YouTube.get_related exists in SHUKLAMUSIC. 
-                        # Return format expected: dict with vidid, title, duration, duration_sec
                         related = await YouTube.get_related(current_vidid, self.history[chat_id])
                         if related:
                             self.pending_autoplay[chat_id] = related
@@ -132,7 +132,6 @@ class Call(PyTgCalls):
             pass
         finally:
             self.autoplay_prefetching.discard(chat_id)
-    # -------------------------------------------
 
     def _build_stream(
         self,
@@ -167,7 +166,6 @@ class Call(PyTgCalls):
                 stream=stream,
                 config=types.GroupCallConfig(auto_start=False),
             )
-            # Trigger prefetch asynchronously whenever a new song starts playing
             asyncio.create_task(self._prefetch_next(chat_id))
         except exceptions.NoActiveGroupCall:
             raise
@@ -351,7 +349,6 @@ class Call(PyTgCalls):
             users = len(await assistant.get_participants(chat_id))
             if users == 1:
                 autoend[chat_id] = datetime.now() + timedelta(minutes=1)
-
     async def change_stream(self, client: PyTgCalls, chat_id: int):
         check = db.get(chat_id)
         popped = None
@@ -375,7 +372,7 @@ class Call(PyTgCalls):
                     vidid = popped.get("vidid")
                     if vidid and vidid not in ["telegram", "soundcloud"]:
                         self.history[chat_id].append(vidid)
-                        del self.history[chat_id][:-20]  # Keep history limited to 20
+                        del self.history[chat_id][:-20]
                         
                         related = self.pending_autoplay.pop(chat_id, None)
                         
@@ -394,11 +391,10 @@ class Call(PyTgCalls):
                         else:
                             self.autoplay_failures[chat_id] = 0
                             
-                            # Append related track properties back to dictionary (queue)
                             db[chat_id].append(
                                 {
                                     "vidid": related["vidid"],
-                                    "file": f"vid_{related['vidid']}", # Triggers internal YT download logic below
+                                    "file": f"vid_{related['vidid']}",
                                     "title": related["title"],
                                     "by": "Autoplay",
                                     "chat_id": popped.get("chat_id", chat_id),
@@ -407,7 +403,6 @@ class Call(PyTgCalls):
                                     "seconds": related.get("duration_sec", 0),
                                 }
                             )
-                            # Autoplay Alerts & Logging
                             try:
                                 short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
                                 notice = await app.send_message(
@@ -510,7 +505,7 @@ class Call(PyTgCalls):
             stream = self._build_stream(file_path, video=video)
             try:
                 await self._play_on_assistant(client, chat_id, stream)
-                        except Exception:
+            except Exception:
                 return await app.send_message(
                     original_chat_id,
                     text=_["call_6"],
@@ -655,5 +650,3 @@ class Call(PyTgCalls):
                         await self.stop_stream(update.chat_id)
 
 SHUKLA = Call()
-
-              
