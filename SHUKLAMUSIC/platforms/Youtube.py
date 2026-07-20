@@ -1,10 +1,3 @@
-# ---------------------------------------------------------------
-# 🔸 ShrutiMusic Api Youtube.py file.
-# 🔹 Developed & Maintained by: Nand Yaduvanshi (https://github.com/NoxxOP)
-# 📅 Copyright © 2025 – All Rights Reserved
-# ❤️ Made with dedication and love by NoxxOP & itzshukla
-# ---------------------------------------------------------------
-
 import asyncio
 import os
 import re
@@ -16,22 +9,17 @@ from py_yt import VideosSearch, Playlist
 import aiohttp
 
 API_URL = os.environ.get("API_URL", "https://api01.shrutibots.site")
-
 API_KEY = os.environ.get("API_KEY", "ShrutiBots2knm7tCsnIVesZt50Lwb") ## Get This API KEY FROM: @SHRUTIAPIBOT 
-
 DOWNLOAD_DIR = "downloads"
-
 
 def time_to_seconds(time):
     stringt = str(time)
     return sum(int(x) * 60 ** i for i, x in enumerate(reversed(stringt.split(":"))))
 
-
 # ── Conversion lock: prevents two coroutines converting the same file ──
 import threading as _threading
 _conv_locks: dict = {}
 _conv_lock_guard = _threading.Lock()
-
 
 def _get_conv_lock(path: str):
     with _conv_lock_guard:
@@ -39,51 +27,37 @@ def _get_conv_lock(path: str):
             _conv_locks[path] = asyncio.Lock()
         return _conv_locks[path]
 
-
 def _wav_path(mp3: str) -> str:
     return mp3.replace(".mp3", ".wav")
-
 
 def _tmp_wav_path(mp3: str) -> str:
     return mp3.replace(".mp3", ".wav.tmp")
 
-
 async def _convert_to_wav(mp3_path: str) -> str:
-    """
-    Pre-convert MP3 → 48 kHz stereo PCM WAV so pytgcalls streams with
-    zero decode overhead (only Opus encode needed during playback).
-    Uses a .tmp file + atomic rename to prevent partial-file reads.
-    """
     wav  = _wav_path(mp3_path)
     tmp  = _tmp_wav_path(mp3_path)
 
-    # Fast path – WAV already ready
     if os.path.exists(wav) and os.path.getsize(wav) > 0:
         return wav
 
-    # Serialise per-file so two callers don't race
     lock = _get_conv_lock(mp3_path)
     async with lock:
-        # Re-check after acquiring lock
         if os.path.exists(wav) and os.path.getsize(wav) > 0:
             return wav
-
-        # Clean up any leftover .tmp
         if os.path.exists(tmp):
             try:
                 os.remove(tmp)
             except Exception:
                 pass
-
         try:
             proc = await asyncio.create_subprocess_exec(
                 "ffmpeg", "-y",
-                "-threads", "0",          # multi-threaded decode
+                "-threads", "0",          
                 "-i", mp3_path,
-                "-ar", "48000",           # match pytgcalls AudioQuality.HIGH
-                "-ac", "2",               # stereo
-                "-acodec", "pcm_s16le",   # raw PCM – zero decode overhead during stream
-                "-map_metadata", "-1",    # strip tags (smaller, faster seek)
+                "-ar", "48000",           
+                "-ac", "2",               
+                "-acodec", "pcm_s16le",   
+                "-map_metadata", "-1",    
                 tmp,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -91,7 +65,7 @@ async def _convert_to_wav(mp3_path: str) -> str:
             await proc.wait()
 
             if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
-                os.replace(tmp, wav)       # atomic rename
+                os.replace(tmp, wav)       
                 return wav
         except Exception:
             pass
@@ -101,15 +75,9 @@ async def _convert_to_wav(mp3_path: str) -> str:
                     os.remove(tmp)
                 except Exception:
                     pass
-
-    return mp3_path   # fallback: stream MP3 if conversion failed
-
+    return mp3_path   
 
 def _cleanup_wav_cache(keep: int = 25) -> None:
-    """
-    Keep only the <keep> most-recently-used WAV files.
-    Called asynchronously so it never blocks the event loop.
-    """
     try:
         wavs = [
             os.path.join(DOWNLOAD_DIR, f)
@@ -118,12 +86,10 @@ def _cleanup_wav_cache(keep: int = 25) -> None:
         ]
         if len(wavs) <= keep:
             return
-        # Sort oldest-accessed first
         wavs.sort(key=lambda p: os.path.getatime(p))
         for old in wavs[: len(wavs) - keep]:
             try:
                 os.remove(old)
-                # Also remove matching .mp3 to free space
                 mp3 = old.replace(".wav", ".mp3")
                 if os.path.exists(mp3):
                     os.remove(mp3)
@@ -131,7 +97,6 @@ def _cleanup_wav_cache(keep: int = 25) -> None:
                 pass
     except Exception:
         pass
-
 
 async def download_song(link: str) -> str:
     video_id = link.split("v=")[-1].split("&")[0] if "v=" in link else link
@@ -142,14 +107,12 @@ async def download_song(link: str) -> str:
     mp3_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp3")
     wav_path = _wav_path(mp3_path)
 
-    # ── 1. Return cached WAV (lag-free stream, zero conversion wait) ──
     if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
         return wav_path
 
-    # ── 2. Download MP3 from ShrutiAPI if not cached ──
     if not (os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0):
         downloaded = False
-        for attempt in range(2):          # 1 retry on failure
+        for attempt in range(2):          
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
@@ -174,20 +137,15 @@ async def download_song(link: str) -> str:
                     except Exception:
                         pass
                 if attempt == 0:
-                    await asyncio.sleep(2)   # brief pause before retry
+                    await asyncio.sleep(2)   
 
         if not downloaded or not (os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0):
             return None
 
-    # ── 3. Pre-convert to WAV (blocks only for conversion, not download) ──
     result = await _convert_to_wav(mp3_path)
-
-    # ── 4. Background cache housekeeping (non-blocking) ──
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, _cleanup_wav_cache, 25)
-
     return result
-
 
 async def download_video(link: str) -> str:
     video_id = link.split("v=")[-1].split("&")[0] if "v=" in link else link
@@ -222,7 +180,6 @@ async def download_video(link: str) -> str:
                 pass
         return None
 
-
 class YouTubeAPI:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
@@ -230,6 +187,33 @@ class YouTubeAPI:
         self.status = "https://www.youtube.com/oembed?url="
         self.listbase = "https://youtube.com/playlist?list="
         self.reg = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+    # --- AUTOPLAY KA RELATED SONG DHUNDHNE WALA FUNCTION ---
+    async def get_related(self, vidid: str, history: list) -> dict:
+        try:
+            search_query = f"https://www.youtube.com/watch?v={vidid}"
+            results = VideosSearch(search_query, limit=5)
+            response = await results.next()
+            
+            if not response or not response.get("result"):
+                return None
+
+            for track in response["result"]:
+                track_id = track.get("id")
+                # Ensure related track is not in history
+                if track_id and track_id not in history and track_id != vidid:
+                    duration_min = track.get("duration", "0:00")
+                    duration_sec = int(time_to_seconds(duration_min)) if duration_min else 0
+                    return {
+                        "vidid": track_id,
+                        "title": track.get("title", "Unknown Track"),
+                        "duration": duration_min,
+                        "duration_sec": duration_sec
+                    }
+            return None
+        except Exception:
+            return None
+    # --------------------------------------------------------
 
     async def exists(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
@@ -425,6 +409,5 @@ class YouTubeAPI:
             return None, False
         except Exception:
             return None, False
-
 
 YouTube = YouTubeAPI()
