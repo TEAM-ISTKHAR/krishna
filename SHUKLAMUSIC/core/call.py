@@ -698,10 +698,7 @@ class Call(PyTgCalls):
                     original_chat_id,
                     text=_["call_6"],
                 )
-            if videoid == "telegram":
-                button = stream_markup(_, chat_id)
-                run = await app.send_photo(
-                  if videoid == "telegram":
+                            if videoid == "telegram":
                     button = stream_markup(_, chat_id)
                     run = await app.send_photo(
                         chat_id=original_chat_id,
@@ -749,6 +746,7 @@ class Call(PyTgCalls):
                     )
                     db[chat_id][0]["mystic"] = run
                     db[chat_id][0]["markup"] = "stream"
+
     async def ping(self):
         pings = []
         if getattr(config, "STRING1", None): pings.append(self.one.ping)
@@ -789,3 +787,4 @@ class Call(PyTgCalls):
         if getattr(config, "STRING5", None): self.five.on_update()(stream_handler)
 
 SHUKLA = Call()
+                                                          
