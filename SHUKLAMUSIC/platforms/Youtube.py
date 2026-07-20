@@ -18,7 +18,7 @@ LOGGER = logging.getLogger(__name__)
 
 # ✅ Primary API: TeamInflex
 INFLEX_API_URL = os.environ.get("API_URL", "https://teaminflex.xyz")
-INFLEX_API_KEY = os.environ.get("YOUTUBE_API_KEY", "INFLEX99600328D")
+INFLEX_API_KEY = os.environ.get("YOUTUBE_API_KEY", "INFLEX86759628D")
 
 # ✅ Secondary Fallback API: ShrutiBots
 SHRUTI_API_URL = os.environ.get("SHRUTI_API_URL", "https://api01.shrutibots.site")
@@ -305,40 +305,51 @@ class YouTubeAPI:
         self.listbase = "https://youtube.com/playlist?list="
         self.reg = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
-    # ✅ SMART ANTI-REPEAT AUTOPLAY SEARCH
+    # ✅ SMART ANTI-REPEAT AUTOPLAY SEARCH (Crash Proof)
     async def get_related(self, vidid: str, history: list) -> dict:
         try:
-            curr_info = VideosSearch(f"https://www.youtube.com/watch?v={vidid}", limit=1)
-            curr_res = (await curr_info.next()).get("result")
-            
-            if not curr_res:
-                return None
-                
-            current_track = curr_res[0]
-            title = current_track.get("title", "")
-            channel_name = current_track.get("channel", {}).get("name", "")
-            
-            clean_title = re.sub(r'\[.*?\]|\(.*?\)','', title).strip()
-            
-            if channel_name and "VEVO" not in channel_name.upper():
-                search_query = f"{channel_name} songs"
-            else:
-                search_query = f"{clean_title} audio song"
+            import re
+            import random
 
-            results = VideosSearch(search_query, limit=15)
+            search_query = "latest trending songs" # Default fallback
+            
+            try:
+                curr_info = VideosSearch(vidid, limit=1)
+                curr_res = (await curr_info.next()).get("result")
+                
+                if curr_res and len(curr_res) > 0:
+                    current_track = curr_res[0]
+                    title = current_track.get("title", "")
+                    channel_name = current_track.get("channel", {}).get("name", "")
+                    
+                    clean_title = re.sub(r'\[.*?\]|\(.*?\)','', title).strip()
+                    
+                    if channel_name and "VEVO" not in channel_name.upper():
+                        search_query = f"{channel_name} hit songs"
+                    else:
+                        search_query = f"{clean_title} official audio"
+            except Exception:
+                pass
+
+            results = VideosSearch(search_query, limit=20)
             response = await results.next()
             
+            if not response or not response.get("result"):
+                results = VideosSearch("latest hit hindi songs", limit=15)
+                response = await results.next()
+
             if not response or not response.get("result"):
                 return None
 
             tracks = response["result"]
-            random.shuffle(tracks) # Randomize taaki same gaana repeat na ho
+            random.shuffle(tracks) 
 
             for track in tracks:
                 track_id = track.get("id")
                 if track_id and track_id not in history and track_id != vidid:
                     duration_min = track.get("duration", "0:00")
-                    if duration_min.count(":") > 1 or (duration_min.count(":") == 1 and int(duration_min.split(":")[0]) > 15):
+                    
+                    if duration_min.count(":") > 1 or (duration_min.count(":") == 1 and int(duration_min.split(":")[0]) > 12):
                         continue
                         
                     duration_sec = int(time_to_seconds(duration_min)) if duration_min else 0
@@ -594,4 +605,3 @@ class YouTubeAPI:
             return None, False
 
 YouTube = YouTubeAPI()
-
