@@ -1,5 +1,7 @@
 import asyncio
 import os
+import random
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Union
@@ -117,7 +119,7 @@ class Call(PyTgCalls):
             check = db.get(chat_id)
             if check and len(check) > 1:
                 return
-            
+
             is_autoplay = await get_autoplay(chat_id)
             if is_autoplay and check:
                 current_vidid = check[0].get("vidid")
@@ -360,7 +362,7 @@ class Call(PyTgCalls):
                 loop = loop - 1
                 await set_loop(chat_id, loop)
             await auto_clean(popped)
-            
+
             # --- MAIN AUTOPLAY LOGIC EXECUTION ---
             if not check:
                 try:
@@ -373,15 +375,155 @@ class Call(PyTgCalls):
                     if vidid and vidid not in ["telegram", "soundcloud"]:
                         self.history[chat_id].append(vidid)
                         del self.history[chat_id][:-20]
-                        
+
                         related = self.pending_autoplay.pop(chat_id, None)
-                        
+
                         if not related:
                             try:
-                                related = await YouTube.get_related(vidid, self.history[chat_id])
-                            except Exception:
-                                related = None
+                                # 🟢 ADVANCED SPOTIFY-STYLE SEARCH ALGORITHM
+                                raw_title = popped.get("title", "Unknown Title")
+                                title_lower = str(raw_title).lower()
+                                last_vidid = str(vidid)
+
+                                keywords_map = {
+                                    "Hindi": [
+                                        "arijit singh", "shreya ghoshal", "atif aslam", "neha kakkar", "jubin nautiyal", 
+                                        "darshan raval", "armaan malik", "sonu nigam", "badshah", "sunidhi chauhan", 
+                                        "udit narayan", "kumar sanu", "alka yagnik", "sachet tandon", "parampara", 
+                                        "b praak", "vishal mishra", "shilpa rao", "kk", "mohit chauhan", "ar rahman", 
+                                        "pritam", "mithoon", "kishore kumar", "lata mangeshkar", "asha bhosle", 
+                                        "mukesh", "mohammed rafi", "mika singh", "yo yo honey singh", "guru randhawa", 
+                                        "tony kakkar", "neeti mohan", "monali thakur", "palak muchhal", "amit trivedi", 
+                                        "rahat fateh ali khan", "shafqat amanat ali", "tulsi kumar", "amaal mallik", 
+                                        "rochak kohli", "stebin ben", "javed ali", "kailash kher", "shankar mahadevan",
+                                        "amit mishra", "dhvani bhanushali", "divya kumar", "nakash aziz"
+                                    ],
+                                    "Punjabi": [
+                                        "sidhu moose wala", "karan aujla", "diljit dosanjh", "ap dhillon", "amrit maan", 
+                                        "shubh", "kaka", "hardy sandhu", "guru randhawa", "jass manak", "parmish verma", 
+                                        "jaani", "ammy virk", "garry sandhu", "jassie gill", "babbu maan", "gurdas maan", 
+                                        "sharry mann", "mankirt aulakh", "nimrat khaira", "jasmine sandlas", "sunanda sharma", 
+                                        "miss pooja", "bohemia", "imran khan", "dr zeus", "jazzy b", "gippy grewal", 
+                                        "akhil", "prabh gill", "guri", "tarsem jassar", "ranjit bawa", "kavita seth"
+                                    ],
+                                    "Bhojpuri": [
+                                        "pawan singh", "khesari lal yadav", "shilpi raj", "antra singh", "pramod premi", 
+                                        "ritesh pandey", "arvind akela kallu", "gunjan singh", "samar singh", "neha raj", 
+                                        "manoj tiwari", "ravi kishan", "dinesh lal yadav", "nirahua", "kalpana", 
+                                        "indu sonali", "priyanka singh", "ankush raja", "golu gold", "neelkamal singh", 
+                                        "rakesh mishra", "akshara singh", "mohan rathore", "khushboo tiwari"
+                                    ],
+                                    "Haryanvi": [
+                                        "sapna choudhary", "renuka panwar", "gulzaar chhaniwala", "sumit goswami", 
+                                        "raju punjabi", "amit saini rohtakiya", "pranjal dahiya", "md kd", "masoom sharma", 
+                                        "fazilpuria", "gajender phogat", "vikas kumar", "raj mawar", "surender romio", 
+                                        "ruchika jangid", "anu kadyan", "diler kharkiya", "kd desi rock", "ajay hooda", 
+                                        "danjal", "anjali raghav"
+                                    ],
+                                    "Tamil": [
+                                        "anirudh", "ar rahman", "yuvan shankar raja", "sid sriram", "harris jayaraj", 
+                                        "ilaiyaraaja", "spb", "s p balasubrahmanyam", "k s chithra", "sujatha", 
+                                        "karthik", "vijay prakash", "benny dayal", "haricharan", "d imman", 
+                                        "g v prakash", "santhosh narayanan", "vidyasagar", "deva", "pradeep kumar", 
+                                        "sean roldan", "chinmayi", "shweta mohan", "hariharan", "naresh iyer"
+                                    ],
+                                    "Telugu": [
+                                        "devi sri prasad", "dsp", "thaman", "sid sriram", "anurag kulkarni", "mangli", 
+                                        "mm keeravani", "mani sharma", "s p balasubrahmanyam", "k s chithra", "sunitha", 
+                                        "geetha madhuri", "rahul sipligunj", "ram miriyala", "mickey j meyer", 
+                                        "gopi sundar", "s p b charan", "singer smita", "karthik", "hemanth", "inno genga"
+                                    ],
+                                    "English": [
+                                        "taylor swift", "justin bieber", "ed sheeran", "ariana grande", "the weeknd", 
+                                        "drake", "eminem", "billie eilish", "dua lipa", "post malone", "harry styles", 
+                                        "selena gomez", "bruno mars", "maroon 5", "coldplay", "imagine dragons", 
+                                        "rihanna", "beyonce", "adele", "lady gaga", "katy perry", "shawn mendes", 
+                                        "charlie puth", "olivia rodrigo", "doja cat", "lil nas x", "kendrick lamar", 
+                                        "j cole", "travis scott", "miley cyrus", "shakira", "david guetta", "calvin harris"
+                                    ]
+                                }
+
+                                ignore_artist_kws = ["hindi", "punjabi", "bhojpuri", "haryanvi", "tamil", "telugu", "english"]
+                                detected_lang = None
+                                detected_artist = None
+                                detected_mood = None
                                 
+                                moods_list = ["sad", "love", "romantic", "lofi", "chill", "party", "mashup", "emotional", "heartbreak", "dance", "dj"]
+                                for mood in moods_list:
+                                    if mood in title_lower:
+                                        detected_mood = mood
+                                        break
+
+                                for lang, kws in keywords_map.items():
+                                    for kw in kws:
+                                        if kw in title_lower:
+                                            detected_lang = lang
+                                            if kw not in ignore_artist_kws:
+                                                detected_artist = kw.title()
+                                            break
+                                    if detected_lang:
+                                        break
+
+                                query_parts = []
+                                if detected_lang:
+                                    available_singers = [s for s in keywords_map[detected_lang] if s not in ignore_artist_kws]
+                                    if detected_artist and random.randint(1, 10) <= 7:
+                                        query_parts.append(detected_artist)
+                                    elif available_singers:
+                                        new_singer = random.choice(available_singers).title()
+                                        query_parts.append(new_singer)
+                                        detected_artist = new_singer
+                                elif detected_artist:
+                                    query_parts.append(detected_artist)
+                                    
+                                if query_parts:
+                                    if detected_mood:
+                                        query_parts.append(detected_mood)
+                                    random_modifiers = ["audio track", "lyrical", "best of", "hits", "new", "live", "unplugged"]
+                                    query_parts.append(random.choice(random_modifiers))
+                                    search_query = " ".join(query_parts)
+                                else:
+                                    clean_title = re.sub(r'[\[\(].*?[\]\)]', '', str(raw_title))
+                                    clean_title = clean_title.split("|")[0].split("-")[0].split(",")[0].strip()
+                                    fallback_modifiers = ["similar artists", "playlist", "radio mix", "hits"]
+                                    search_query = f"{clean_title} {random.choice(fallback_modifiers)}"
+
+                                use_vidid = last_vidid if random.randint(1, 10) <= 4 else None
+
+                                try:
+                                    recommendation = await YouTube.autoplay(last_vidid=use_vidid, title=search_query, max_duration=600)
+                                    if recommendation:
+                                        related = {
+                                            "vidid": recommendation.get("vidid"),
+                                            "title": recommendation.get("title", "Unknown Title"),
+                                            "duration": recommendation.get("duration_min", "0:00"),
+                                            "duration_sec": recommendation.get("duration_sec", 0),
+                                        }
+                                    else:
+                                        related = None
+                                except AttributeError:
+                                    from py_yt import VideosSearch
+                                    results = VideosSearch(search_query, limit=1)
+                                    res = await results.next()
+                                    if res and res.get("result"):
+                                        track = res["result"][0]
+                                        dur = track.get("duration", "0:00")
+                                        parts = dur.split(":")
+                                        duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                        related = {
+                                            "vidid": track.get("id"),
+                                            "title": track.get("title", "Unknown Title"),
+                                            "duration": dur,
+                                            "duration_sec": duration_sec
+                                        }
+                                    else:
+                                        related = await YouTube.get_related(vidid, self.history[chat_id])
+                            except Exception:
+                                try:
+                                    related = await YouTube.get_related(vidid, self.history[chat_id])
+                                except Exception:
+                                    related = None
+
                         if not related:
                             self.autoplay_failures[chat_id] += 1
                             if self.autoplay_failures[chat_id] >= 4:
@@ -390,7 +532,7 @@ class Call(PyTgCalls):
                                 except: pass
                         else:
                             self.autoplay_failures[chat_id] = 0
-                            
+
                             db[chat_id].append(
                                 {
                                     "vidid": related["vidid"],
@@ -411,7 +553,8 @@ class Call(PyTgCalls):
                                     disable_web_page_preview=True
                                 )
                                 asyncio.create_task(_delete_msg(notice, 6))
-                                
+
+                                # 👉 YOUR ORIGINAL LOGGER PRESERVED HERE 👈
                                 if hasattr(config, "LOG_GROUP_ID") and config.LOG_GROUP_ID:
                                     matched_title = popped.get("title", "Unknown Track")[:45]
                                     log_text = (
@@ -425,12 +568,12 @@ class Call(PyTgCalls):
                             except Exception:
                                 pass
             # -------------------------------------
-            
+
             if not check:
                 self.clear_autoplay(chat_id)
                 await _clear_(chat_id)
                 return await client.leave_call(chat_id, close=False)
-                
+
         except Exception:
             try:
                 self.clear_autoplay(chat_id)
@@ -449,15 +592,15 @@ class Call(PyTgCalls):
         videoid = check[0]["vidid"]
         db[chat_id][0]["played"] = 0
         exis = (check[0]).get("old_dur")
-        
+
         if exis:
             db[chat_id][0]["dur"] = exis
             db[chat_id][0]["seconds"] = check[0]["old_second"]
             db[chat_id][0]["speed_path"] = None
             db[chat_id][0]["speed"] = 1.0
-            
+
         video = True if str(streamtype) == "video" else False
-        
+
         if "live_" in queued:
             n, link = await YouTube.video(videoid, True)
             if n == 0:
@@ -488,7 +631,7 @@ class Call(PyTgCalls):
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
-            
+
         elif "vid_" in queued:
             mystic = await app.send_message(original_chat_id, _["call_7"])
             try:
@@ -545,6 +688,7 @@ class Call(PyTgCalls):
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
+
         else:
             stream = self._build_stream(queued, video=video)
             try:
@@ -557,96 +701,91 @@ class Call(PyTgCalls):
             if videoid == "telegram":
                 button = stream_markup(_, chat_id)
                 run = await app.send_photo(
-                    chat_id=original_chat_id,
-                    photo=(
-                        config.TELEGRAM_AUDIO_URL
-                        if str(streamtype) == "audio"
-                        else config.TELEGRAM_VIDEO_URL
-                    ),
-                    caption=_["stream_1"].format(
-                        config.SUPPORT_GROUP, title[:23], check[0]["dur"], user
-                    ),
-                    reply_markup=InlineKeyboardMarkup(button),
-                )
-                db[chat_id][0]["mystic"] = run
-                db[chat_id][0]["markup"] = "tg"
-            elif videoid == "soundcloud":
-                button = stream_markup(_, chat_id)
-                run = await app.send_photo(
-                    chat_id=original_chat_id,
-                    photo=config.SOUNCLOUD_IMG_URL,
-                    caption=_["stream_1"].format(
-                        config.SUPPORT_GROUP, title[:23], check[0]["dur"], user
-                    ),
-                    reply_markup=InlineKeyboardMarkup(button),
-                )
-                db[chat_id][0]["mystic"] = run
-                db[chat_id][0]["markup"] = "tg"
-            else:
-                img = await gen_thumb(videoid)
-                button = stream_markup(_, chat_id)
-                run = await app.send_photo(
-                    chat_id=original_chat_id,
-                    photo=img,
-                    caption=_["stream_1"].format(
-                        f"https://t.me/{app.username}?start=info_{videoid}",
-                        title[:23],
-                        check[0]["dur"],
-                        user,
-                    ),
-                    reply_markup=InlineKeyboardMarkup(button),
-                )
-                db[chat_id][0]["mystic"] = run
-                db[chat_id][0]["markup"] = "stream"
-
+                  if videoid == "telegram":
+                    button = stream_markup(_, chat_id)
+                    run = await app.send_photo(
+                        chat_id=original_chat_id,
+                        photo=(
+                            config.TELEGRAM_VIDEO_URL
+                            if video
+                            else config.TELEGRAM_AUDIO_URL
+                        ),
+                        caption=_["stream_1"].format(
+                            config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
+                        ),
+                        reply_markup=InlineKeyboardMarkup(button),
+                    )
+                    db[chat_id][0]["mystic"] = run
+                    db[chat_id][0]["markup"] = "tg"
+                elif videoid == "soundcloud":
+                    button = stream_markup(_, chat_id)
+                    run = await app.send_photo(
+                        chat_id=original_chat_id,
+                        photo=(
+                            config.TELEGRAM_VIDEO_URL
+                            if video
+                            else config.SOUNCLOUD_IMG_URL
+                        ),
+                        caption=_["stream_1"].format(
+                            config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
+                        ),
+                        reply_markup=InlineKeyboardMarkup(button),
+                    )
+                    db[chat_id][0]["mystic"] = run
+                    db[chat_id][0]["markup"] = "tg"
+                else:
+                    img = await gen_thumb(videoid)
+                    button = stream_markup(_, chat_id)
+                    run = await app.send_photo(
+                        chat_id=original_chat_id,
+                        photo=img,
+                        caption=_["stream_1"].format(
+                            f"https://t.me/{app.username}?start=info_{videoid}",
+                            title[:23],
+                            check[0]["dur"],
+                            user,
+                        ),
+                        reply_markup=InlineKeyboardMarkup(button),
+                    )
+                    db[chat_id][0]["mystic"] = run
+                    db[chat_id][0]["markup"] = "stream"
     async def ping(self):
         pings = []
-        if config.STRING1:
-            pings.append(self.one.ping)
-        if config.STRING2:
-            pings.append(self.two.ping)
-        if config.STRING3:
-            pings.append(self.three.ping)
-        if config.STRING4:
-            pings.append(self.four.ping)
-        if config.STRING5:
-            pings.append(self.five.ping)
-        return str(round(sum(pings) / len(pings), 3)) if pings else "0"
+        if getattr(config, "STRING1", None): pings.append(self.one.ping)
+        if getattr(config, "STRING2", None): pings.append(self.two.ping)
+        if getattr(config, "STRING3", None): pings.append(self.three.ping)
+        if getattr(config, "STRING4", None): pings.append(self.four.ping)
+        if getattr(config, "STRING5", None): pings.append(self.five.ping)
+        return str(round(sum(pings) / len(pings), 3)) if pings else "0.0"
 
     async def start(self):
-        LOGGER(__name__).info("Starting PyTgCalls Client...\n")
-        if config.STRING1:
-            await self.one.start()
-        if config.STRING2:
-            await self.two.start()
-        if config.STRING3:
-            await self.three.start()
-        if config.STRING4:
-            await self.four.start()
-        if config.STRING5:
-            await self.five.start()
+        LOGGER(__name__).info("Starting PyTgCalls Clients...\n")
+        if getattr(config, "STRING1", None): await self.one.start()
+        if getattr(config, "STRING2", None): await self.two.start()
+        if getattr(config, "STRING3", None): await self.three.start()
+        if getattr(config, "STRING4", None): await self.four.start()
+        if getattr(config, "STRING5", None): await self.five.start()
 
     async def decorators(self):
-        for string, client in [
-            (config.STRING1, self.one),
-            (config.STRING2, self.two),
-            (config.STRING3, self.three),
-            (config.STRING4, self.four),
-            (config.STRING5, self.five),
-        ]:
-            if not string:
-                continue
-            @client.on_update()
-            async def _update_handler(_, update: types.Update, _client=client):
-                if isinstance(update, types.StreamEnded):
-                    if update.stream_type == types.StreamEnded.Type.AUDIO:
-                        await self.change_stream(_client, update.chat_id)
-                elif isinstance(update, types.ChatUpdate):
-                    if update.status in [
-                        types.ChatUpdate.Status.KICKED,
-                        types.ChatUpdate.Status.LEFT_GROUP,
-                        types.ChatUpdate.Status.CLOSED_VOICE_CHAT,
-                    ]:
-                        await self.stop_stream(update.chat_id)
+        async def stream_handler(client, update):
+            try:
+                c_id = getattr(update, "chat_id", None)
+                if not c_id: return
+                
+                t_name = type(update).__name__
+                if "ChatUpdate" in t_name:
+                    status = str(getattr(update, "status", "")).upper()
+                    if "KICKED" in status or "LEFT" in status or "CLOSED" in status:
+                        await self.stop_stream(c_id)
+                elif "StreamEnd" in t_name:
+                    await self.change_stream(client, c_id)
+            except Exception as e:
+                LOGGER(__name__).error(f"Stream handler error: {e}")
+
+        if getattr(config, "STRING1", None): self.one.on_update()(stream_handler)
+        if getattr(config, "STRING2", None): self.two.on_update()(stream_handler)
+        if getattr(config, "STRING3", None): self.three.on_update()(stream_handler)
+        if getattr(config, "STRING4", None): self.four.on_update()(stream_handler)
+        if getattr(config, "STRING5", None): self.five.on_update()(stream_handler)
 
 SHUKLA = Call()
