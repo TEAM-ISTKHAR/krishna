@@ -6,6 +6,7 @@ import yt_dlp
 import aiohttp
 import logging
 import config  
+import random
 from typing import Union
 from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
@@ -15,12 +16,13 @@ from youtubesearchpython.__future__ import VideosSearch, Playlist
 DOWNLOAD_DIR = "downloads"
 LOGGER = logging.getLogger(__name__)
 
-API_URL = os.environ.get("SHRUTI_API_URL", "https://api.shrutibots.site")
-API_KEY = os.environ.get("SHRUTI_API_KEY", "ShrutiBotsjnr5WhxptvuIKX7pnLpi")
+# ✅ Primary API: TeamInflex
+INFLEX_API_URL = os.environ.get("API_URL", "https://teaminflex.xyz")
+INFLEX_API_KEY = os.environ.get("YOUTUBE_API_KEY", "INFLEX99600328D")
 
-# Worker API (Now Primary)
-WORKER_FALLBACK_API_URL = os.getenv("WORKER_FALLBACK_API_URL", "https://youtubenewapi.skybotsdeveloper.workers.dev")
-WORKER_FALLBACK_API_KEY = os.getenv("WORKER_FALLBACK_API_KEY", "itsmesid")
+# ✅ Secondary Fallback API: ShrutiBots
+SHRUTI_API_URL = os.environ.get("SHRUTI_API_URL", "https://api01.shrutibots.site")
+SHRUTI_API_KEY = os.environ.get("SHRUTI_API_KEY", "ShrutiBots2knm7tCsnIVesZt50Lwb")
 
 def time_to_seconds(time_str):
     stringt = str(time_str)
@@ -31,7 +33,6 @@ def get_safe_filename(title: str, default_id: str) -> str:
         return default_id
     return re.sub(r'[\\/*?:"<>|]', "", title).strip()
 
-# 🟢 THE FIX: Perfect YouTube ID Extractor for all link types
 def extract_video_id(link: str) -> str:
     if "youtu.be/" in link:
         return link.split("youtu.be/")[1].split("?")[0]
@@ -39,7 +40,6 @@ def extract_video_id(link: str) -> str:
         return link.split("v=")[1].split("&")[0]
     return link
 
-# Helper for Safe Async Execution
 async def _async_run(func, *args, **kwargs):
     try:
         loop = asyncio.get_running_loop()
@@ -48,9 +48,8 @@ async def _async_run(func, *args, **kwargs):
     return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 # ----------------- DOWNLOADERS -----------------
-
-async def api_download(video_id: str, download_type: str, title: str = None) -> str:
-    if not API_URL or not API_KEY:
+async def api_download(video_id: str, download_type: str, api_url: str, api_key: str, title: str = None, api_name: str = "API") -> str:
+    if not api_url or not api_key:
         return None
 
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -58,81 +57,32 @@ async def api_download(video_id: str, download_type: str, title: str = None) -> 
     ext = "mp4" if download_type == "video" else "mp3"
     file_path = os.path.join(DOWNLOAD_DIR, f"{filename}.{ext}")
 
-    # 🟢 FIX: Check size > 50000 bytes (50KB) to ignore fake HTML error files
     if os.path.exists(file_path) and os.path.getsize(file_path) > 50000:
         return file_path
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"{API_URL}/download",
-                params={"url": video_id, "type": "audio" if download_type == "audio" else "video", "api_key": API_KEY},
+                f"{api_url}/download",
+                params={"url": video_id, "type": "audio" if download_type == "audio" else "video", "api_key": api_key},
                 timeout=aiohttp.ClientTimeout(total=600)
             ) as resp:
                 if resp.status != 200:
-                    LOGGER.error(f"API Error: Status {resp.status}")
+                    LOGGER.error(f"{api_name} Error: Status {resp.status}")
                     return None
                 
                 with open(file_path, "wb") as f:
                     async for chunk in resp.content.iter_chunked(131072):
                         f.write(chunk)
                         
-        # 🟢 FIX: Again check size to confirm real media file
         if os.path.exists(file_path) and os.path.getsize(file_path) > 50000:
-            LOGGER.info(f"🟢 SOURCE-HOPPING SUCCESS: Downloaded '{title}' from Shruti API!")
+            LOGGER.info(f"🟢 SOURCE-HOPPING SUCCESS: Downloaded '{title}' from {api_name}!")
             return file_path
         else:
-            LOGGER.warning(f"🔴 Shruti API returned corrupted/empty file for '{title}'. Rejecting it.")
+            LOGGER.warning(f"🔴 {api_name} returned corrupted/empty file for '{title}'. Rejecting it.")
             return None
     except Exception as e:
-        LOGGER.error(f"Shruti API Download Error: {e}")
-        if os.path.exists(file_path):
-            try: os.remove(file_path)
-            except: pass
-        return None
-
-# Worker Downloader
-async def worker_api_download(video_id: str, download_type: str, title: str = None) -> str:
-    if not WORKER_FALLBACK_API_URL or not WORKER_FALLBACK_API_KEY:
-        return None
-
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-    filename = get_safe_filename(title, f"wk_{video_id}")
-    ext = "mp4" if download_type == "video" else "mp3"
-    file_path = os.path.join(DOWNLOAD_DIR, f"{filename}.{ext}")
-
-    # 🟢 FIX: Size check > 50000 (50KB)
-    if os.path.exists(file_path) and os.path.getsize(file_path) > 50000:
-        return file_path
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            params = {
-                "url": video_id, 
-                "type": "audio" if download_type == "audio" else "video", 
-                "api_key": WORKER_FALLBACK_API_KEY
-            }
-            async with session.get(
-                f"{WORKER_FALLBACK_API_URL}/download", 
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=600)
-            ) as resp:
-                if resp.status != 200:
-                    LOGGER.error(f"Worker API Error: Status {resp.status}")
-                    return None
-                
-                with open(file_path, "wb") as f:
-                    async for chunk in resp.content.iter_chunked(131072):
-                        f.write(chunk)
-                        
-        # 🟢 FIX: Size check > 50000 (50KB)
-        if os.path.exists(file_path) and os.path.getsize(file_path) > 50000:
-            return file_path
-        else:
-            LOGGER.warning(f"🔴 Worker API returned corrupted/empty file for '{title}'. Rejecting it.")
-            return None
-    except Exception as e:
-        LOGGER.error(f"Worker API Download Error: {e}")
+        LOGGER.error(f"{api_name} Download Error: {e}")
         if os.path.exists(file_path):
             try: os.remove(file_path)
             except: pass
@@ -283,16 +233,16 @@ async def download_song(link: str, title: str = None) -> str:
         except Exception:
             pass
 
-    # 1. Primary API (Worker)
-    worker_result = await worker_api_download(video_id, "audio", title)
-    if worker_result: return worker_result
-
-    LOGGER.warning(f"🔴 Worker API failed for '{title}'. Hopping to Shruti API...")
-
-    # 2. Shruti API Fallback
-    api_result = await api_download(video_id, "audio", title)
+    # 1. Primary API (Inflex)
+    api_result = await api_download(video_id, "audio", INFLEX_API_URL, INFLEX_API_KEY, title, "Inflex API")
     if api_result: return api_result
     
+    LOGGER.warning(f"🔴 Inflex API failed for '{title}'. Hopping to Shruti API...")
+
+    # 2. Secondary API (ShrutiBots)
+    api_result2 = await api_download(video_id, "audio", SHRUTI_API_URL, SHRUTI_API_KEY, title, "Shruti API")
+    if api_result2: return api_result2
+
     LOGGER.warning(f"🔴 Shruti API failed for '{title}'. Hopping to yt-dlp...")
 
     # 3. yt-dlp Fallback
@@ -331,22 +281,20 @@ async def download_video(link: str, title: str = None) -> str:
         except:
             pass
 
-    # 1. Primary API (Worker)
-    worker_result = await worker_api_download(video_id, "video", title)
-    if worker_result: return worker_result
-
-    LOGGER.warning(f"🔴 Worker API failed for '{title}'. Hopping to Shruti API...")
-
-    # 2. Shruti API Fallback
-    api_result = await api_download(video_id, "video", title)
+    # 1. Primary API (Inflex)
+    api_result = await api_download(video_id, "video", INFLEX_API_URL, INFLEX_API_KEY, title, "Inflex API")
     if api_result: return api_result
     
+    LOGGER.warning(f"🔴 Inflex API failed for '{title}'. Hopping to Shruti API...")
+
+    # 2. Secondary API (ShrutiBots)
+    api_result2 = await api_download(video_id, "video", SHRUTI_API_URL, SHRUTI_API_KEY, title, "Shruti API")
+    if api_result2: return api_result2
+
     LOGGER.warning(f"🔴 Shruti API failed for '{title}'. Hopping to yt-dlp...")
 
     # 3. yt-dlp Fallback
     return await ytdl_fallback_download(link, "video", title)
-
-
 # ----------------- YOUTUBE API CLASS -----------------
 
 class YouTubeAPI:
@@ -356,6 +304,53 @@ class YouTubeAPI:
         self.status = "https://www.youtube.com/oembed?url="
         self.listbase = "https://youtube.com/playlist?list="
         self.reg = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+    # ✅ SMART ANTI-REPEAT AUTOPLAY SEARCH
+    async def get_related(self, vidid: str, history: list) -> dict:
+        try:
+            curr_info = VideosSearch(f"https://www.youtube.com/watch?v={vidid}", limit=1)
+            curr_res = (await curr_info.next()).get("result")
+            
+            if not curr_res:
+                return None
+                
+            current_track = curr_res[0]
+            title = current_track.get("title", "")
+            channel_name = current_track.get("channel", {}).get("name", "")
+            
+            clean_title = re.sub(r'\[.*?\]|\(.*?\)','', title).strip()
+            
+            if channel_name and "VEVO" not in channel_name.upper():
+                search_query = f"{channel_name} songs"
+            else:
+                search_query = f"{clean_title} audio song"
+
+            results = VideosSearch(search_query, limit=15)
+            response = await results.next()
+            
+            if not response or not response.get("result"):
+                return None
+
+            tracks = response["result"]
+            random.shuffle(tracks) # Randomize taaki same gaana repeat na ho
+
+            for track in tracks:
+                track_id = track.get("id")
+                if track_id and track_id not in history and track_id != vidid:
+                    duration_min = track.get("duration", "0:00")
+                    if duration_min.count(":") > 1 or (duration_min.count(":") == 1 and int(duration_min.split(":")[0]) > 15):
+                        continue
+                        
+                    duration_sec = int(time_to_seconds(duration_min)) if duration_min else 0
+                    return {
+                        "vidid": track_id,
+                        "title": track.get("title", "Unknown Track"),
+                        "duration": duration_min,
+                        "duration_sec": duration_sec
+                    }
+            return None
+        except Exception:
+            return None
 
     async def exists(self, link: str, videoid: Union[bool, str] = None):
         if videoid: link = self.base + link
@@ -598,79 +593,5 @@ class YouTubeAPI:
             LOGGER.error(f"Error in YouTubeAPI.download: {e}")
             return None, False
 
-    async def autoplay(self, last_vidid: str, title: str, max_duration: int = None):
-        try:
-            import random
-            search_query = f"{title} official audio"
-            valid_choices = []
-            
-            try:
-                search = VideosSearch(search_query, limit=15)
-                result = await search.next()
-                if result and result.get("result"):
-                    for res in result["result"]:
-                        vidid = str(res.get("id") or "")
-                        if not vidid or vidid == "None" or vidid == last_vidid: continue
-                            
-                        dur_str = str(res.get("duration", "0:00"))
-                        dur_sec = 0
-                        if dur_str and ":" in dur_str:
-                            parts = dur_str.split(":")
-                            try:
-                                if len(parts) == 2: dur_sec = int(parts[0]) * 60 + int(parts[1])
-                                elif len(parts) == 3: dur_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-                            except ValueError: pass
-                                
-                        if dur_sec < 30: continue
-                        if max_duration and dur_sec > max_duration: continue
-                            
-                        valid_choices.append({
-                            "vidid": vidid,
-                            "title": str(res.get("title", "Unknown Title")).title(),
-                            "duration_min": dur_str,
-                            "duration_sec": dur_sec
-                        })
-            except Exception: pass 
-
-            if not valid_choices:
-                ytdl_opts = {
-                    "quiet": True, 
-                    "extract_flat": True, 
-                    "noplaylist": True,
-                    "cookiefile": "cookies.txt",
-                    "extractor_args": {"youtube": ["player_client=ios,tv_embedded"]} 
-                } 
-                ydl = yt_dlp.YoutubeDL(ytdl_opts)
-                
-                r = await _async_run(ydl.extract_info, f"ytsearch10:{search_query}", download=False)
-                if r and "entries" in r:
-                    for entry in r["entries"]:
-                        vidid = entry.get("id")
-                        if not vidid or vidid == last_vidid: continue
-                        
-                        raw_dur = entry.get("duration", 0)
-                        try: dur_sec = int(float(raw_dur)) if raw_dur else 0
-                        except (ValueError, TypeError): dur_sec = 0
-                            
-                        if not dur_sec or dur_sec < 30: continue
-                        if max_duration and dur_sec > max_duration: continue
-                            
-                        m, s = divmod(dur_sec, 60)
-                        h, m = divmod(m, 60)
-                        dur_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
-                        
-                        valid_choices.append({
-                            "vidid": vidid,
-                            "title": str(entry.get("title", "Unknown Title")).title(),
-                            "duration_min": dur_str,
-                            "duration_sec": dur_sec
-                        })
-
-            if valid_choices: return random.choice(valid_choices)
-            return None
-            
-        except Exception as e:
-            LOGGER.error(f"YouTube Autoplay Function Error: {e}")
-            return None
-
 YouTube = YouTubeAPI()
+
