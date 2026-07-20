@@ -44,8 +44,8 @@ from strings import get_string
 checker = {}
 upvoters = {}
 
-# ── 6 Second Auto Delete Function ──
-async def _delete_msg(message, delay: int = 6):
+# ── Auto Delete Function (30 seconds ke liye) ──
+async def _delete_msg(message, delay: int = 30):
     try:
         await asyncio.sleep(delay)
         await message.delete()
@@ -76,8 +76,10 @@ async def del_back_playlist(client, CallbackQuery, _):
         chat = bet[0]
         counter = bet[1]
     chat_id = int(chat)
+    
     if not await is_active_chat(chat_id):
         return await CallbackQuery.answer(_["general_5"], show_alert=True)
+        
     mention = CallbackQuery.from_user.mention
     
     if command == "UpVote":
@@ -159,7 +161,27 @@ async def del_back_playlist(client, CallbackQuery, _):
                             _["admin_14"], show_alert=True
                         )
 
-    if command == "Pause":
+    # ── 🟢 30 SEC AUTOPLAY MESSAGE LOGIC ──
+    if command == "Autoplay":
+        is_autoplay = await get_autoplay(chat_id)
+        if is_autoplay:
+            await set_autoplay(chat_id, False)
+            await CallbackQuery.answer("Autoplay Disabled!", show_alert=False)
+            notice = await app.send_message(
+                chat_id, 
+                "<blockquote>🔴 <b>Aᴜᴛᴏᴘʟᴀʏ Dɪsᴀʙʟᴇᴅ!</b>\n<i>Agla gaana automatically nahi chalega.</i></blockquote>"
+            )
+            return asyncio.create_task(_delete_msg(notice, 30))
+        else:
+            await set_autoplay(chat_id, True)
+            await CallbackQuery.answer("Autoplay Enabled!", show_alert=False)
+            notice = await app.send_message(
+                chat_id, 
+                "<blockquote>🟢 <b>Aᴜᴛᴏᴘʟᴀʏ Eɴᴀʙʟᴇᴅ!</b>\n<i>Agla gaana automatically chalega.</i></blockquote>"
+            )
+            return asyncio.create_task(_delete_msg(notice, 30))
+
+    elif command == "Pause":
         if not await is_music_playing(chat_id):
             return await CallbackQuery.answer(_["admin_1"], show_alert=True)
         await CallbackQuery.answer()
@@ -223,11 +245,11 @@ async def del_back_playlist(client, CallbackQuery, _):
                                     f"<blockquote><emoji id=\"5204046146955153467\">▶️</emoji> <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n<emoji id=\"6271653280187684816\">🎧</emoji> <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
                                     disable_web_page_preview=True
                                 )
-                                asyncio.create_task(_delete_msg(notice, 6))
+                                asyncio.create_task(_delete_msg(notice, 6)) # 6 Sec me delete
                         except Exception:
                             pass
                             
-                check = db.get(chat_id) # Re-check after Autoplay attempts
+                check = db.get(chat_id)
                 # ----------------------------------------
                 
                 if not check:
@@ -278,7 +300,7 @@ async def del_back_playlist(client, CallbackQuery, _):
             db[chat_id][0]["speed_path"] = None
             db[chat_id][0]["speed"] = 1.0
 
-        # ✅ DYNAMIC TIMER LOGIC APPLIED HERE
+        # ✅ DYNAMIC TIMER LOGIC
         dur = check[0].get("dur", "0:00")
         if dur == "Unknown" or dur == "0:00":
             try:
@@ -427,19 +449,6 @@ async def del_back_playlist(client, CallbackQuery, _):
                 db[chat_id][0]["mystic"] = run
                 db[chat_id][0]["markup"] = "stream"
             await CallbackQuery.edit_message_text(txt, reply_markup=close_markup(_))
-
-# ── 🟢 AUTOPLAY BUTTON HANDLER ──
-@app.on_callback_query(filters.regex(r"ADMIN Autoplay") & ~BANNED_USERS)
-async def autoplay_button_handler(client, query: CallbackQuery):
-    chat_id = int(query.data.split("|")[1])
-    is_autoplay = await get_autoplay(chat_id)
-
-    if is_autoplay:
-        await set_autoplay(chat_id, False)
-        await query.answer("🔴 Autoplay Disabled! (Agla gaana nahi chalega)", show_alert=True)
-    else:
-        await set_autoplay(chat_id, True)
-        await query.answer("🟢 Autoplay Enabled! (Agla gaana automatically chalega)", show_alert=True)
 
 
 async def markup_timer():
