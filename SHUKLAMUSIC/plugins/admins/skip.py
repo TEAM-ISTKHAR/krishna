@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, Message
 
@@ -12,6 +14,15 @@ from SHUKLAMUSIC.utils.stream.autoclear import auto_clean
 from SHUKLAMUSIC.utils.thumbnails import get_thumb
 from config import BANNED_USERS
 
+LOGGER = logging.getLogger(__name__)
+
+# ── 6 Second Auto Delete Function ──
+async def _delete_msg(message, delay: int = 6):
+    try:
+        await asyncio.sleep(delay)
+        await message.delete()
+    except Exception:
+        pass
 
 @app.on_message(
     filters.command(["skip", "cskip", "next", "cnext"]) & filters.group & ~BANNED_USERS
@@ -40,7 +51,7 @@ async def skip(cli, message: Message, _, chat_id):
                             if popped:
                                 await auto_clean(popped)
                             if not check:
-                                # --- AUTOPLAY SKIP LOGIC ---
+                                # --- 🚀 CRASH-PROOF AUTOPLAY SKIP LOGIC ---
                                 try:
                                     is_autoplay = await get_autoplay(chat_id)
                                 except:
@@ -49,9 +60,8 @@ async def skip(cli, message: Message, _, chat_id):
                                 if is_autoplay and popped and popped.get("vidid") not in ["telegram", "soundcloud", None]:
                                     try:
                                         vidid = popped["vidid"]
-                                        SHUKLA.history[chat_id].append(vidid)
-                                        del SHUKLA.history[chat_id][:-20]
-                                        related = await YouTube.get_related(vidid, SHUKLA.history[chat_id])
+                                        # Removed buggy history check, direct safe search
+                                        related = await YouTube.get_related(vidid, [])
                                         if related:
                                             db[chat_id].append({
                                                 "vidid": related["vidid"],
@@ -64,13 +74,15 @@ async def skip(cli, message: Message, _, chat_id):
                                                 "seconds": related.get("duration_sec", 0),
                                             })
                                             short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
-                                            await app.send_message(
+                                            notice = await app.send_message(
                                                 chat_id, 
                                                 f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
                                                 disable_web_page_preview=True
                                             )
-                                    except:
-                                        pass
+                                            # ✅ Deletes message in exactly 6 seconds
+                                            asyncio.create_task(_delete_msg(notice, 6))
+                                    except Exception as e:
+                                        LOGGER.error(f"Autoplay Skip Error: {e}")
                                 # ---------------------------
                                 if not check:
                                     try:
@@ -101,7 +113,7 @@ async def skip(cli, message: Message, _, chat_id):
             if popped:
                 await auto_clean(popped)
             if not check:
-                # --- AUTOPLAY SKIP LOGIC ---
+                # --- 🚀 CRASH-PROOF AUTOPLAY SKIP LOGIC ---
                 try:
                     is_autoplay = await get_autoplay(chat_id)
                 except:
@@ -110,9 +122,8 @@ async def skip(cli, message: Message, _, chat_id):
                 if is_autoplay and popped and popped.get("vidid") not in ["telegram", "soundcloud", None]:
                     try:
                         vidid = popped["vidid"]
-                        SHUKLA.history[chat_id].append(vidid)
-                        del SHUKLA.history[chat_id][:-20]
-                        related = await YouTube.get_related(vidid, SHUKLA.history[chat_id])
+                        # Removed buggy history check, direct safe search
+                        related = await YouTube.get_related(vidid, [])
                         if related:
                             db[chat_id].append({
                                 "vidid": related["vidid"],
@@ -125,13 +136,15 @@ async def skip(cli, message: Message, _, chat_id):
                                 "seconds": related.get("duration_sec", 0),
                             })
                             short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
-                            await app.send_message(
+                            notice = await app.send_message(
                                 chat_id, 
                                 f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
                                 disable_web_page_preview=True
                             )
-                    except:
-                        pass
+                            # ✅ Deletes message in exactly 6 seconds
+                            asyncio.create_task(_delete_msg(notice, 6))
+                    except Exception as e:
+                        LOGGER.error(f"Autoplay Skip Error: {e}")
                 # ---------------------------
 
                 if not check:
