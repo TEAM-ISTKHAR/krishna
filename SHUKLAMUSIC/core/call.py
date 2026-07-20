@@ -363,6 +363,7 @@ class Call(PyTgCalls):
                 await set_loop(chat_id, loop)
             await auto_clean(popped)
 
+            # --- STRICT YOUTUBE MUSIC AUTOPLAY FIX ---
             if not check:
                 try:
                     is_autoplay = await get_autoplay(chat_id)
@@ -379,127 +380,10 @@ class Call(PyTgCalls):
 
                         if not related:
                             try:
-                                raw_title = popped.get("title", "Unknown Title")
-                                title_lower = str(raw_title).lower()
-                                last_vidid = str(vidid)
-
-                                keywords_map = {
-                                    "Hindi": [
-                                        "arijit singh", "shreya ghoshal", "atif aslam", "neha kakkar", "jubin nautiyal", 
-                                        "darshan raval", "armaan malik", "sonu nigam", "badshah", "sunidhi chauhan", 
-                                        "udit narayan", "kumar sanu", "alka yagnik", "sachet tandon", "parampara", 
-                                        "b praak", "vishal mishra", "shilpa rao", "kk", "mohit chauhan", "ar rahman", 
-                                        "pritam", "mithoon", "kishore kumar", "lata mangeshkar", "asha bhosle", 
-                                        "mukesh", "mohammed rafi", "mika singh", "yo yo honey singh", "guru randhawa", 
-                                        "tony kakkar", "neeti mohan", "monali thakur", "palak muchhal", "amit trivedi", 
-                                        "rahat fateh ali khan", "shafqat amanat ali", "tulsi kumar", "amaal mallik", 
-                                        "rochak kohli", "stebin ben", "javed ali", "kailash kher", "shankar mahadevan",
-                                        "amit mishra", "dhvani bhanushali", "divya kumar", "nakash aziz"
-                                    ],
-                                    "Punjabi": [
-                                        "sidhu moose wala", "karan aujla", "diljit dosanjh", "ap dhillon", "amrit maan", 
-                                        "shubh", "kaka", "hardy sandhu", "guru randhawa", "jass manak", "parmish verma", 
-                                        "jaani", "ammy virk", "garry sandhu", "jassie gill", "babbu maan", "gurdas maan", 
-                                        "sharry mann", "mankirt aulakh", "nimrat khaira", "jasmine sandlas", "sunanda sharma", 
-                                        "miss pooja", "bohemia", "imran khan", "dr zeus", "jazzy b", "gippy grewal", 
-                                        "akhil", "prabh gill", "guri", "tarsem jassar", "ranjit bawa", "kavita seth"
-                                    ],
-                                    "Bhojpuri": [
-                                        "pawan singh", "khesari lal yadav", "shilpi raj", "antra singh", "pramod premi", 
-                                        "ritesh pandey", "arvind akela kallu", "gunjan singh", "samar singh", "neha raj", 
-                                        "manoj tiwari", "ravi kishan", "dinesh lal yadav", "nirahua", "kalpana", 
-                                        "indu sonali", "priyanka singh", "ankush raja", "golu gold", "neelkamal singh", 
-                                        "rakesh mishra", "akshara singh", "mohan rathore", "khushboo tiwari"
-                                    ],
-                                    "Haryanvi": [
-                                        "sapna choudhary", "renuka panwar", "gulzaar chhaniwala", "sumit goswami", 
-                                        "raju punjabi", "amit saini rohtakiya", "pranjal dahiya", "md kd", "masoom sharma", 
-                                        "fazilpuria", "gajender phogat", "vikas kumar", "raj mawar", "surender romio", 
-                                        "ruchika jangid", "anu kadyan", "diler kharkiya", "kd desi rock", "ajay hooda", 
-                                        "danjal", "anjali raghav"
-                                    ]
-                                }
-
-                                ignore_artist_kws = ["hindi", "punjabi", "bhojpuri", "haryanvi"]
-                                detected_lang = None
-                                detected_artist = None
-                                detected_mood = None
-                                
-                                moods_list = ["sad", "love", "romantic", "lofi", "chill", "party", "mashup", "emotional", "heartbreak", "dance", "dj"]
-                                for mood in moods_list:
-                                    if mood in title_lower:
-                                        detected_mood = mood
-                                        break
-
-                                for lang, kws in keywords_map.items():
-                                    for kw in kws:
-                                        if kw in title_lower:
-                                            detected_lang = lang
-                                            if kw not in ignore_artist_kws:
-                                                detected_artist = kw.title()
-                                            break
-                                    if detected_lang:
-                                        break
-
-                                query_parts = []
-                                if detected_lang:
-                                    available_singers = [s for s in keywords_map[detected_lang] if s not in ignore_artist_kws]
-                                    if detected_artist and random.randint(1, 10) <= 7:
-                                        query_parts.append(detected_artist)
-                                    elif available_singers:
-                                        new_singer = random.choice(available_singers).title()
-                                        query_parts.append(new_singer)
-                                        detected_artist = new_singer
-                                elif detected_artist:
-                                    query_parts.append(detected_artist)
-                                    
-                                if query_parts:
-                                    if detected_mood:
-                                        query_parts.append(detected_mood)
-                                    random_modifiers = ["audio track", "lyrical", "best of", "hits", "new", "live", "unplugged"]
-                                    query_parts.append(random.choice(random_modifiers))
-                                    search_query = " ".join(query_parts)
-                                else:
-                                    clean_title = re.sub(r'[\[\(].*?[\]\)]', '', str(raw_title))
-                                    clean_title = clean_title.split("|")[0].split("-")[0].split(",")[0].strip()
-                                    fallback_modifiers = ["similar artists", "playlist", "radio mix", "hits"]
-                                    search_query = f"{clean_title} {random.choice(fallback_modifiers)}"
-
-                                use_vidid = last_vidid if random.randint(1, 10) <= 4 else None
-
-                                try:
-                                    recommendation = await YouTube.autoplay(last_vidid=use_vidid, title=search_query, max_duration=600)
-                                    if recommendation:
-                                        related = {
-                                            "vidid": recommendation.get("vidid"),
-                                            "title": recommendation.get("title", "Unknown Title"),
-                                            "duration": recommendation.get("duration_min", "0:00"),
-                                            "duration_sec": recommendation.get("duration_sec", 0),
-                                        }
-                                    else:
-                                        related = None
-                                except AttributeError:
-                                    from py_yt import VideosSearch
-                                    results = VideosSearch(search_query, limit=1)
-                                    res = await results.next()
-                                    if res and res.get("result"):
-                                        track = res["result"][0]
-                                        dur = track.get("duration", "0:00")
-                                        parts = dur.split(":")
-                                        duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                                        related = {
-                                            "vidid": track.get("id"),
-                                            "title": track.get("title", "Unknown Title"),
-                                            "duration": dur,
-                                            "duration_sec": duration_sec
-                                        }
-                                    else:
-                                        related = await YouTube.get_related(vidid, self.history[chat_id])
+                                # ONLY use official related tracks (No keyword search hacks)
+                                related = await YouTube.get_related(vidid, self.history[chat_id])
                             except Exception:
-                                try:
-                                    related = await YouTube.get_related(vidid, self.history[chat_id])
-                                except Exception:
-                                    related = None
+                                related = None
 
                         if not related:
                             self.autoplay_failures[chat_id] += 1
@@ -510,7 +394,7 @@ class Call(PyTgCalls):
                         else:
                             self.autoplay_failures[chat_id] = 0
 
-                            # ✅ YAHAN "ʀєǫυєsᴛєʀ : Spotify Radio 🟢" ADD KIYA HAI
+                            # ✅ Updated Autoplay Name Here
                             db[chat_id].append(
                                 {
                                     "vidid": related["vidid"],
@@ -544,11 +428,13 @@ class Call(PyTgCalls):
                                     await app.send_message(config.LOG_GROUP_ID, log_text, disable_web_page_preview=True)
                             except Exception:
                                 pass
+            # -------------------------------------
 
             if not check:
                 self.clear_autoplay(chat_id)
                 await _clear_(chat_id)
                 return await client.leave_call(chat_id, close=False)
+
         except Exception:
             try:
                 self.clear_autoplay(chat_id)
