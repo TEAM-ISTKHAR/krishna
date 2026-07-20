@@ -75,7 +75,7 @@ async def skip(cli, message: Message, _, chat_id):
                                             short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
                                             notice = await app.send_message(
                                                 chat_id, 
-                                                f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
+                                                f"<blockquote>▶️ <b>ᴀᴜᴛᴏᴘʟᴀʏ ɴᴇxᴛ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
                                                 disable_web_page_preview=True
                                             )
                                             # ✅ Deletes message in exactly 6 seconds
