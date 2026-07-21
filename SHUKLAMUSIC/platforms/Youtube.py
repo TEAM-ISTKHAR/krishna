@@ -424,7 +424,7 @@ class YouTubeAPI:
         except Exception:
             return None, False
 
-    async def autoplay(self, videoid: str):
+    async def get_related(self, videoid: str):
         """
         Smooth and fast autoplay function to get related video ID.
         Uses aiohttp for non-blocking fast requests.
