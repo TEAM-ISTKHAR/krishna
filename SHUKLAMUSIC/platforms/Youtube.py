@@ -1,3 +1,4 @@
+
 # ---------------------------------------------------------------
 # 🔸 ShrutiMusic Api Youtube.py file.
 # 🔹 Developed & Maintained by: Nand Yaduvanshi (https://github.com/NoxxOP)
@@ -424,12 +425,13 @@ class YouTubeAPI:
         except Exception:
             return None, False
 
-    async def get_related(self, videoid: str, *args, **kwargs):
+    async def get_related(self, videoid: str, history: list = None, *args, **kwargs):
         """
         Smooth Autoplay with 100% working fallback
+        Handles the format exactly as skip.py expects
         """
         try:
-            related_videos = []
+            related = None
             
             # Tarika 1: Fast Web Scraping
             url = f"https://www.youtube.com/watch?v={videoid}"
@@ -439,25 +441,45 @@ class YouTubeAPI:
                         html = await response.text()
                         video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
                         for vid in video_ids:
-                            if vid != videoid and vid not in related_videos:
-                                related_videos.append(vid)
+                            if vid != videoid:
+                                related = {
+                                    "vidid": vid,
+                                    "title": "YouTube Autoplay Track",
+                                    "duration": "0:00",
+                                    "duration_sec": 0
+                                }
+                                break 
             
-            if related_videos:
-                return related_videos[:10]
+            if related:
+                return related
 
             # Tarika 2: Py-yt Search Fallback (Agar IP block ho ya limit lag jaye)
-            results = VideosSearch("trending lo-fi hindi songs", limit=10)
+            results = VideosSearch("trending lo-fi hindi songs", limit=5)
             for result in (await results.next())["result"]:
-                related_videos.append(result["id"])
+                if result["id"] != videoid:
+                    dur = result.get("duration", "0:00")
+                    parts = dur.split(":")
+                    duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                    related = {
+                        "vidid": result["id"],
+                        "title": result.get("title", "Unknown Title"),
+                        "duration": dur,
+                        "duration_sec": duration_sec
+                    }
+                    break
             
-            if related_videos:
-                return related_videos
+            if related:
+                return related
 
         except Exception:
             pass
 
         # Tarika 3: Ultimate Fallback (VC kabhi leave nahi karega)
-        return ["kffacxfA7G4", "Yq-q6_y4-C4", "g20IG9_5ZOM", "7eXGZ1D0oYI", "Q7aEEyLzKTY"]
-
+        return {
+            "vidid": "kffacxfA7G4", 
+            "title": "Fallback Track",
+            "duration": "0:00",
+            "duration_sec": 0
+        }
 
 YouTube = YouTubeAPI()
