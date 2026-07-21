@@ -380,7 +380,7 @@ class Call(PyTgCalls):
 
                         if not related:
                             try:
-                                # ONLY use official related tracks (No keyword search hacks)
+                                # ONLY use official related tracks (No random keyword search)
                                 related = await YouTube.get_related(vidid, self.history[chat_id])
                             except Exception:
                                 related = None
@@ -400,7 +400,7 @@ class Call(PyTgCalls):
                                     "vidid": related["vidid"],
                                     "file": f"vid_{related['vidid']}",
                                     "title": related["title"],
-                                    "by": "ʀєǫυєsᴛєʀ : Spotify Radio 🟢",
+                                    "by": "𝙰𝚄𝚃𝙾𝙿𝙻𝙰𝚈",
                                     "chat_id": popped.get("chat_id", chat_id),
                                     "streamtype": "audio",
                                     "dur": related.get("duration", "Unknown"),
