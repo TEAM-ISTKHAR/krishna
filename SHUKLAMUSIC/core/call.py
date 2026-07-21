@@ -112,15 +112,14 @@ class Call(PyTgCalls):
         self.history.pop(chat_id, None)
 
     async def _prefetch_next(self, chat_id: int) -> None:
-        """Background mein next song cache karne ka function"""
         if chat_id in self.autoplay_prefetching:
             return
         self.autoplay_prefetching.add(chat_id)
         try:
-            await asyncio.sleep(5) # Let the current song buffer first
+            await asyncio.sleep(5) 
             check = db.get(chat_id)
             if check and len(check) > 1:
-                return # User already has songs in queue
+                return 
 
             is_autoplay = await get_autoplay(chat_id)
             if is_autoplay and check:
@@ -130,24 +129,21 @@ class Call(PyTgCalls):
                     related = None
                     
                     try:
-                        # 1st Priority: YouTube's Native Algorithm
                         related = await YouTube.get_related(current_vidid, history)
                     except Exception:
                         pass
                         
                     if not related:
                         try:
-                            # 2nd Priority: Strict Artist & Title Anti-Duplicate Match
                             video_info = await Video.get(current_vidid)
                             if video_info:
                                 title = video_info.get("title", "")
-                                channel_name = video_info.get("channel", {}).get("name", "")
                                 
-                                # Current song ka naam saaf karna (Lyrical/Official hata ke)
-                                clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix', '', title, flags=re.IGNORECASE).strip().lower()
+                                # Clean title for better search
+                                clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', title, flags=re.IGNORECASE).strip().lower()
                                 
-                                # Usi artist ke baaki gaane search karenge
-                                search_query = f"{channel_name} superhit songs"
+                                # Smart Vibe & Language Matcher: Searching for similar songs
+                                search_query = f"{clean_title} similar songs audio"
                                 
                                 results = VideosSearch(search_query, limit=15)
                                 res = await results.next()
@@ -158,9 +154,9 @@ class Call(PyTgCalls):
                                         
                                         if track_id and track_id != current_vidid and track_id not in history:
                                             track_title = track.get("title", "")
-                                            track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix', '', track_title, flags=re.IGNORECASE).strip().lower()
+                                            track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', track_title, flags=re.IGNORECASE).strip().lower()
                                             
-                                            # ANTI-DUPLICATE CHECK: Naye gaane ke naam me purane gaane ka naam nahi aana chahiye
+                                            # ANTI-DUPLICATE: Must be a different song
                                             if track_clean and track_clean != clean_title and clean_title not in track_clean:
                                                 dur = track.get("duration", "0:00")
                                                 parts = dur.split(":")
@@ -172,7 +168,7 @@ class Call(PyTgCalls):
                                                     "duration": dur,
                                                     "duration_sec": duration_sec
                                                 }
-                                                break # Ek valid different gaana mil gaya
+                                                break 
                         except Exception:
                             pass
                     
@@ -216,7 +212,6 @@ class Call(PyTgCalls):
                 stream=stream,
                 config=types.GroupCallConfig(auto_start=False),
             )
-            # Yahan prefetch trigger hota hai
             asyncio.create_task(self._prefetch_next(chat_id))
         except exceptions.NoActiveGroupCall:
             raise
@@ -424,12 +419,10 @@ class Call(PyTgCalls):
                     vidid = popped.get("vidid")
                     if vidid and vidid not in ["telegram", "soundcloud"]:
                         self.history[chat_id].append(vidid)
-                        del self.history[chat_id][:-20] # Keep recent 20 songs
+                        del self.history[chat_id][:-20] 
 
-                        # Prefetch check
                         related = self.pending_autoplay.pop(chat_id, None)
 
-                        # Agar cache fail hua toh fir se strict search/match karega
                         if not related:
                             try:
                                 related = await YouTube.get_related(vidid, self.history[chat_id])
@@ -441,11 +434,9 @@ class Call(PyTgCalls):
                                     video_info = await Video.get(vidid)
                                     if video_info:
                                         title = video_info.get("title", "")
-                                        channel_name = video_info.get("channel", {}).get("name", "")
+                                        clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', title, flags=re.IGNORECASE).strip().lower()
                                         
-                                        clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix', '', title, flags=re.IGNORECASE).strip().lower()
-                                        
-                                        search_query = f"{channel_name} hit songs"
+                                        search_query = f"{clean_title} similar songs audio"
                                         results = VideosSearch(search_query, limit=15)
                                         res = await results.next()
                                         
@@ -454,9 +445,8 @@ class Call(PyTgCalls):
                                                 track_id = track.get("id")
                                                 if track_id and track_id != vidid and track_id not in self.history[chat_id]:
                                                     track_title = track.get("title", "")
-                                                    track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix', '', track_title, flags=re.IGNORECASE).strip().lower()
+                                                    track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', track_title, flags=re.IGNORECASE).strip().lower()
                                                     
-                                                    # ANTI-DUPLICATE CHECK
                                                     if track_clean and track_clean != clean_title and clean_title not in track_clean:
                                                         dur = track.get("duration", "0:00")
                                                         parts = dur.split(":")
@@ -468,7 +458,7 @@ class Call(PyTgCalls):
                                                             "duration": dur,
                                                             "duration_sec": duration_sec
                                                         }
-                                                        break # DIFFERENT song found!
+                                                        break 
                                 except Exception:
                                     pass
 
