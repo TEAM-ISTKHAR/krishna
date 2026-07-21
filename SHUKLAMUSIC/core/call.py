@@ -138,13 +138,105 @@ class Call(PyTgCalls):
                             video_info = await Video.get(current_vidid)
                             if video_info:
                                 title = video_info.get("title", "")
+                                channel_name = video_info.get("channel", {}).get("name", "")
+                                title_lower = title.lower() + " " + channel_name.lower()
                                 
-                                # Clean title for better search
+                                # --- 🟢 ULTRA SMART DICTIONARY MATCHER (MOOD, LANG, ARTIST) ---
+                                keywords_map = {
+                                    "Hindi": [
+                                        "hindi", "bollywood", "arijit singh", "shreya ghoshal", "atif aslam", "neha kakkar", "jubin nautiyal", 
+                                        "darshan raval", "armaan malik", "sonu nigam", "badshah", "sunidhi chauhan", 
+                                        "udit narayan", "kumar sanu", "alka yagnik", "sachet tandon", "parampara", 
+                                        "b praak", "vishal mishra", "shilpa rao", "kk", "mohit chauhan", "ar rahman", 
+                                        "pritam", "mithoon", "kishore kumar", "lata mangeshkar", "asha bhosle", 
+                                        "mukesh", "mohammed rafi", "mika singh", "yo yo honey singh", "guru randhawa", 
+                                        "tony kakkar", "neeti mohan", "monali thakur", "palak muchhal", "amit trivedi", 
+                                        "rahat fateh ali khan", "shafqat amanat ali", "tulsi kumar", "amaal mallik", 
+                                        "rochak kohli", "stebin ben", "javed ali", "kailash kher", "shankar mahadevan",
+                                        "amit mishra", "dhvani bhanushali", "divya kumar", "nakash aziz", "t-series", "zee music"
+                                    ],
+                                    "Punjabi": [
+                                        "punjabi", "pollywood", "sidhu moose wala", "karan aujla", "diljit dosanjh", "ap dhillon", "amrit maan", 
+                                        "shubh", "kaka", "hardy sandhu", "guru randhawa", "jass manak", "parmish verma", 
+                                        "jaani", "ammy virk", "garry sandhu", "jassie gill", "babbu maan", "gurdas maan", 
+                                        "sharry mann", "mankirt aulakh", "nimrat khaira", "jasmine sandlas", "sunanda sharma", 
+                                        "miss pooja", "bohemia", "imran khan", "dr zeus", "jazzy b", "gippy grewal", 
+                                        "akhil", "prabh gill", "guri", "tarsem jassar", "ranjit bawa", "kavita seth", "speed records"
+                                    ],
+                                    "Bhojpuri": [
+                                        "bhojpuri", "pawan singh", "khesari lal yadav", "shilpi raj", "antra singh", "pramod premi", 
+                                        "ritesh pandey", "arvind akela kallu", "gunjan singh", "samar singh", "neha raj", 
+                                        "manoj tiwari", "ravi kishan", "dinesh lal yadav", "nirahua", "kalpana", 
+                                        "indu sonali", "priyanka singh", "ankush raja", "golu gold", "neelkamal singh", 
+                                        "rakesh mishra", "akshara singh", "mohan rathore", "khushboo tiwari"
+                                    ],
+                                    "Haryanvi": [
+                                        "haryanvi", "sapna choudhary", "renuka panwar", "gulzaar chhaniwala", "sumit goswami", 
+                                        "raju punjabi", "amit saini rohtakiya", "pranjal dahiya", "md kd", "masoom sharma", 
+                                        "fazilpuria", "gajender phogat", "vikas kumar", "raj mawar", "surender romio", 
+                                        "ruchika jangid", "anu kadyan", "diler kharkiya", "kd desi rock", "ajay hooda", 
+                                        "danjal", "anjali raghav"
+                                    ],
+                                    "Tamil": [
+                                        "tamil", "kollywood", "anirudh", "ar rahman", "yuvan shankar raja", "sid sriram", "harris jayaraj", 
+                                        "ilaiyaraaja", "spb", "s p balasubrahmanyam", "k s chithra", "sujatha", 
+                                        "karthik", "vijay prakash", "benny dayal", "haricharan", "d imman", 
+                                        "g v prakash", "santhosh narayanan", "vidyasagar", "deva", "pradeep kumar", 
+                                        "sean roldan", "chinmayi", "shweta mohan", "hariharan", "naresh iyer"
+                                    ],
+                                    "Telugu": [
+                                        "telugu", "tollywood", "devi sri prasad", "dsp", "thaman", "sid sriram", "anurag kulkarni", "mangli", 
+                                        "mm keeravani", "mani sharma", "s p balasubrahmanyam", "k s chithra", "sunitha", 
+                                        "geetha madhuri", "rahul sipligunj", "ram miriyala", "mickey j meyer", 
+                                        "gopi sundar", "s p b charan", "singer smita", "karthik", "hemanth", "inno genga"
+                                    ],
+                                    "English": [
+                                        "english", "hollywood", "pop", "taylor swift", "justin bieber", "ed sheeran", "ariana grande", "the weeknd", 
+                                        "drake", "eminem", "billie eilish", "dua lipa", "post malone", "harry styles", 
+                                        "selena gomez", "bruno mars", "maroon 5", "coldplay", "imagine dragons", 
+                                        "rihanna", "beyonce", "adele", "lady gaga", "katy perry", "shawn mendes", 
+                                        "charlie puth", "olivia rodrigo", "doja cat", "lil nas x", "kendrick lamar", 
+                                        "j cole", "travis scott", "miley cyrus", "shakira", "david guetta", "calvin harris"
+                                    ]
+                                }
+
+                                ignore_artist_kws = ["hindi", "punjabi", "bhojpuri", "haryanvi", "tamil", "telugu", "english", "bollywood", "pollywood", "tollywood", "kollywood", "hollywood", "pop", "t-series", "zee music", "speed records"]
+
+                                detected_lang = ""
+                                detected_artist = ""
+                                detected_mood = ""
+                                
+                                moods_list = ["sad", "love", "romantic", "lofi", "chill", "party", "mashup", "emotional", "heartbreak", "dance", "dj", "remix", "slowed", "reverb"]
+                                for mood in moods_list:
+                                    if mood in title_lower:
+                                        detected_mood = mood
+                                        break
+
+                                for lang, kws in keywords_map.items():
+                                    for kw in kws:
+                                        if kw in title_lower:
+                                            detected_lang = lang
+                                            if kw not in ignore_artist_kws:
+                                                detected_artist = kw.title()
+                                            break
+                                    if detected_lang:
+                                        break
+                                
+                                # Cleaning Title for Anti-Duplicate Check
                                 clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', title, flags=re.IGNORECASE).strip().lower()
                                 
-                                # Smart Vibe & Language Matcher: Searching for similar songs
-                                search_query = f"{clean_title} similar songs audio"
+                                # Build Search Query
+                                search_parts = []
+                                if detected_artist: search_parts.append(detected_artist)
+                                if detected_mood: search_parts.append(detected_mood)
+                                if detected_lang: search_parts.append(detected_lang)
                                 
+                                if not search_parts:
+                                    # Fallback if dictionary finds nothing
+                                    search_query = f"{clean_title} similar audio songs"
+                                else:
+                                    search_query = f"{' '.join(search_parts)} hit songs"
+
                                 results = VideosSearch(search_query, limit=15)
                                 res = await results.next()
                                 
@@ -434,9 +526,102 @@ class Call(PyTgCalls):
                                     video_info = await Video.get(vidid)
                                     if video_info:
                                         title = video_info.get("title", "")
+                                        channel_name = video_info.get("channel", {}).get("name", "")
+                                        title_lower = title.lower() + " " + channel_name.lower()
+                                        
+                                        # --- 🟢 ULTRA SMART DICTIONARY MATCHER ---
+                                        keywords_map = {
+                                            "Hindi": [
+                                                "hindi", "bollywood", "arijit singh", "shreya ghoshal", "atif aslam", "neha kakkar", "jubin nautiyal", 
+                                                "darshan raval", "armaan malik", "sonu nigam", "badshah", "sunidhi chauhan", 
+                                                "udit narayan", "kumar sanu", "alka yagnik", "sachet tandon", "parampara", 
+                                                "b praak", "vishal mishra", "shilpa rao", "kk", "mohit chauhan", "ar rahman", 
+                                                "pritam", "mithoon", "kishore kumar", "lata mangeshkar", "asha bhosle", 
+                                                "mukesh", "mohammed rafi", "mika singh", "yo yo honey singh", "guru randhawa", 
+                                                "tony kakkar", "neeti mohan", "monali thakur", "palak muchhal", "amit trivedi", 
+                                                "rahat fateh ali khan", "shafqat amanat ali", "tulsi kumar", "amaal mallik", 
+                                                "rochak kohli", "stebin ben", "javed ali", "kailash kher", "shankar mahadevan",
+                                                "amit mishra", "dhvani bhanushali", "divya kumar", "nakash aziz", "t-series", "zee music"
+                                            ],
+                                            "Punjabi": [
+                                                "punjabi", "pollywood", "sidhu moose wala", "karan aujla", "diljit dosanjh", "ap dhillon", "amrit maan", 
+                                                "shubh", "kaka", "hardy sandhu", "guru randhawa", "jass manak", "parmish verma", 
+                                                "jaani", "ammy virk", "garry sandhu", "jassie gill", "babbu maan", "gurdas maan", 
+                                                "sharry mann", "mankirt aulakh", "nimrat khaira", "jasmine sandlas", "sunanda sharma", 
+                                                "miss pooja", "bohemia", "imran khan", "dr zeus", "jazzy b", "gippy grewal", 
+                                                "akhil", "prabh gill", "guri", "tarsem jassar", "ranjit bawa", "kavita seth", "speed records"
+                                            ],
+                                            "Bhojpuri": [
+                                                "bhojpuri", "pawan singh", "khesari lal yadav", "shilpi raj", "antra singh", "pramod premi", 
+                                                "ritesh pandey", "arvind akela kallu", "gunjan singh", "samar singh", "neha raj", 
+                                                "manoj tiwari", "ravi kishan", "dinesh lal yadav", "nirahua", "kalpana", 
+                                                "indu sonali", "priyanka singh", "ankush raja", "golu gold", "neelkamal singh", 
+                                                "rakesh mishra", "akshara singh", "mohan rathore", "khushboo tiwari"
+                                            ],
+                                            "Haryanvi": [
+                                                "haryanvi", "sapna choudhary", "renuka panwar", "gulzaar chhaniwala", "sumit goswami", 
+                                                "raju punjabi", "amit saini rohtakiya", "pranjal dahiya", "md kd", "masoom sharma", 
+                                                "fazilpuria", "gajender phogat", "vikas kumar", "raj mawar", "surender romio", 
+                                                "ruchika jangid", "anu kadyan", "diler kharkiya", "kd desi rock", "ajay hooda", 
+                                                "danjal", "anjali raghav"
+                                            ],
+                                            "Tamil": [
+                                                "tamil", "kollywood", "anirudh", "ar rahman", "yuvan shankar raja", "sid sriram", "harris jayaraj", 
+                                                "ilaiyaraaja", "spb", "s p balasubrahmanyam", "k s chithra", "sujatha", 
+                                                "karthik", "vijay prakash", "benny dayal", "haricharan", "d imman", 
+                                                "g v prakash", "santhosh narayanan", "vidyasagar", "deva", "pradeep kumar", 
+                                                "sean roldan", "chinmayi", "shweta mohan", "hariharan", "naresh iyer"
+                                            ],
+                                            "Telugu": [
+                                                "telugu", "tollywood", "devi sri prasad", "dsp", "thaman", "sid sriram", "anurag kulkarni", "mangli", 
+                                                "mm keeravani", "mani sharma", "s p balasubrahmanyam", "k s chithra", "sunitha", 
+                                                "geetha madhuri", "rahul sipligunj", "ram miriyala", "mickey j meyer", 
+                                                "gopi sundar", "s p b charan", "singer smita", "karthik", "hemanth", "inno genga"
+                                            ],
+                                            "English": [
+                                                "english", "hollywood", "pop", "taylor swift", "justin bieber", "ed sheeran", "ariana grande", "the weeknd", 
+                                                "drake", "eminem", "billie eilish", "dua lipa", "post malone", "harry styles", 
+                                                "selena gomez", "bruno mars", "maroon 5", "coldplay", "imagine dragons", 
+                                                "rihanna", "beyonce", "adele", "lady gaga", "katy perry", "shawn mendes", 
+                                                "charlie puth", "olivia rodrigo", "doja cat", "lil nas x", "kendrick lamar", 
+                                                "j cole", "travis scott", "miley cyrus", "shakira", "david guetta", "calvin harris"
+                                            ]
+                                        }
+
+                                        ignore_artist_kws = ["hindi", "punjabi", "bhojpuri", "haryanvi", "tamil", "telugu", "english", "bollywood", "pollywood", "tollywood", "kollywood", "hollywood", "pop", "t-series", "zee music", "speed records"]
+
+                                        detected_lang = ""
+                                        detected_artist = ""
+                                        detected_mood = ""
+                                        
+                                        moods_list = ["sad", "love", "romantic", "lofi", "chill", "party", "mashup", "emotional", "heartbreak", "dance", "dj", "remix", "slowed", "reverb"]
+                                        for mood in moods_list:
+                                            if mood in title_lower:
+                                                detected_mood = mood
+                                                break
+
+                                        for lang, kws in keywords_map.items():
+                                            for kw in kws:
+                                                if kw in title_lower:
+                                                    detected_lang = lang
+                                                    if kw not in ignore_artist_kws:
+                                                        detected_artist = kw.title()
+                                                    break
+                                            if detected_lang:
+                                                break
+                                        
                                         clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', title, flags=re.IGNORECASE).strip().lower()
                                         
-                                        search_query = f"{clean_title} similar songs audio"
+                                        search_parts = []
+                                        if detected_artist: search_parts.append(detected_artist)
+                                        if detected_mood: search_parts.append(detected_mood)
+                                        if detected_lang: search_parts.append(detected_lang)
+                                        
+                                        if not search_parts:
+                                            search_query = f"{clean_title} similar audio songs"
+                                        else:
+                                            search_query = f"{' '.join(search_parts)} hit songs"
+
                                         results = VideosSearch(search_query, limit=15)
                                         res = await results.next()
                                         
@@ -499,6 +684,7 @@ class Call(PyTgCalls):
                                         f"<b>🥀 GROUP :</b> {chat_id}\n"
                                         f"<b>🎵 PLAYING :</b> <a href='https://youtube.com/watch?v={related['vidid']}'>{short_title}</a>\n"
                                         f"<b>🔗 MATCHED WITH :</b> {matched_title}\n"
+                                        f"<b>🔍 QUERY USED :</b> {search_query if 'search_query' in locals() else 'Youtube Native API'}\n"
                                         f"<b>⏭ UPCOMING :</b> Autoplay will decide next...</blockquote>"
                                     )
                                     await app.send_message(config.LOG_GROUP_ID, log_text, disable_web_page_preview=True)
