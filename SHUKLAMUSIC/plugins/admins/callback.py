@@ -22,7 +22,7 @@ from strings import get_string
 checker = {}
 upvoters = {}
 
-async def _delete_msg(message, delay: int = 30):
+async def _delete_msg(message, delay: int = 6):
     try:
         await asyncio.sleep(delay)
         await message.delete()
@@ -126,12 +126,12 @@ async def del_back_playlist(client, CallbackQuery, _):
             await set_autoplay(chat_id, False)
             await CallbackQuery.answer("Autoplay Disabled!", show_alert=False)
             notice = await app.send_message(chat_id, "<blockquote>🔴 <b>Aᴜᴛᴏᴘʟᴀʏ Dɪsᴀʙʟᴇᴅ!</b>\n<i>Agla gaana automatically nahi chalega.</i></blockquote>")
-            return asyncio.create_task(_delete_msg(notice, 30))
+            return asyncio.create_task(_delete_msg(notice, 10))
         else:
             await set_autoplay(chat_id, True)
             await CallbackQuery.answer("Autoplay Enabled!", show_alert=False)
             notice = await app.send_message(chat_id, "<blockquote>🟢 <b>Aᴜᴛᴏᴘʟᴀʏ Eɴᴀʙʟᴇᴅ!</b>\n<i>Agla gaana automatically chalega.</i></blockquote>")
-            return asyncio.create_task(_delete_msg(notice, 30))
+            return asyncio.create_task(_delete_msg(notice, 10))
 
     elif command == "Pause":
         if not await is_music_playing(chat_id):
@@ -165,7 +165,7 @@ async def del_back_playlist(client, CallbackQuery, _):
                 if popped:
                     await auto_clean(popped)
                 
-                # --- STANDARD AUTOPLAY TRIGGER FOR SKIP ---
+                # --- 🚀 ALONE-X SMART AUTOPLAY SKIP LOGIC ---
                 if not check:
                     try:
                         is_autoplay = await get_autoplay(chat_id)
@@ -175,14 +175,42 @@ async def del_back_playlist(client, CallbackQuery, _):
                     if is_autoplay and popped and popped.get("vidid") not in ["telegram", "soundcloud", None]:
                         try:
                             vidid = popped["vidid"]
-                            # Official YouTube Related API
-                            related = await YouTube.get_related(vidid, [])
+                            related = None
+                            
+                            from youtubesearchpython.__future__ import Video, VideosSearch
+                            try:
+                                video_info = await Video.get(vidid)
+                                if video_info and "channel" in video_info:
+                                    channel_name = video_info["channel"].get("name", "")
+                                    search_query = f"{channel_name} songs"
+                                    results = VideosSearch(search_query, limit=7)
+                                    res = await results.next()
+                                    if res and res.get("result"):
+                                        for track in res["result"]:
+                                            if track.get("id") != vidid and track.get("duration"):
+                                                dur = track.get("duration", "0:00")
+                                                parts = dur.split(":")
+                                                duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                                related = {
+                                                    "vidid": track.get("id"),
+                                                    "title": track.get("title", "Unknown Title"),
+                                                    "duration": dur,
+                                                    "duration_sec": duration_sec
+                                                }
+                                                break
+                            except Exception:
+                                pass
+                                
+                            if not related:
+                                history = SHUKLA.history.get(chat_id, []) if hasattr(SHUKLA, 'history') else []
+                                related = await YouTube.get_related(vidid, history)
+                                
                             if related:
                                 db[chat_id].append({
                                     "vidid": related["vidid"],
                                     "file": f"vid_{related['vidid']}",
                                     "title": related["title"],
-                                    "by": "𝐀ᴜᴛᴏ𝐏ʟᴀʏ", 
+                                    "by": "Aᴜᴛᴏᴘʟᴀʏ", # ✅ NEW FONT APPLIED HERE
                                     "chat_id": chat_id,
                                     "streamtype": "audio",
                                     "dur": related.get("duration", "Unknown"),
@@ -191,7 +219,7 @@ async def del_back_playlist(client, CallbackQuery, _):
                                 short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
                                 notice = await app.send_message(
                                     chat_id, 
-                                    f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Nᴇxᴛ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
+                                    f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
                                     disable_web_page_preview=True
                                 )
                                 asyncio.create_task(_delete_msg(notice, 6))
@@ -243,7 +271,6 @@ async def del_back_playlist(client, CallbackQuery, _):
                 dynamic_button = stream_markup_timer(_, chat_id, "00:00", dur)
         else:
             dynamic_button = stream_markup_timer(_, chat_id, "00:00", dur)
-
         if "live_" in queued:
             n, link = await YouTube.video(videoid, True)
             if n == 0:
