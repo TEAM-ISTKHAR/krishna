@@ -16,7 +16,6 @@ from config import BANNED_USERS
 
 LOGGER = logging.getLogger(__name__)
 
-# ── 6 Second Auto Delete Function ──
 async def _delete_msg(message, delay: int = 6):
     try:
         await asyncio.sleep(delay)
@@ -51,7 +50,7 @@ async def skip(cli, message: Message, _, chat_id):
                             if popped:
                                 await auto_clean(popped)
                             if not check:
-                                # --- 🚀 STRICT YOUTUBE AUTOPLAY SKIP LOGIC ---
+                                # --- 🚀 ALONE-X SMART AUTOPLAY SKIP LOGIC ---
                                 try:
                                     is_autoplay = await get_autoplay(chat_id)
                                 except:
@@ -60,15 +59,44 @@ async def skip(cli, message: Message, _, chat_id):
                                 if is_autoplay and popped and popped.get("vidid") not in ["telegram", "soundcloud", None]:
                                     try:
                                         vidid = popped["vidid"]
-                                        # Strict Official API
-                                        history = SHUKLA.history.get(chat_id, []) if hasattr(SHUKLA, 'history') else []
-                                        related = await YouTube.get_related(vidid, history)
+                                        related = None
+                                        
+                                        # Smart Channel Search (AloneX logic)
+                                        from youtubesearchpython.__future__ import Video, VideosSearch
+                                        try:
+                                            video_info = await Video.get(vidid)
+                                            if video_info and "channel" in video_info:
+                                                channel_name = video_info["channel"].get("name", "")
+                                                search_query = f"{channel_name} songs"
+                                                results = VideosSearch(search_query, limit=7)
+                                                res = await results.next()
+                                                if res and res.get("result"):
+                                                    for track in res["result"]:
+                                                        if track.get("id") != vidid and track.get("duration"):
+                                                            dur = track.get("duration", "0:00")
+                                                            parts = dur.split(":")
+                                                            duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                                            related = {
+                                                                "vidid": track.get("id"),
+                                                                "title": track.get("title", "Unknown Title"),
+                                                                "duration": dur,
+                                                                "duration_sec": duration_sec
+                                                            }
+                                                            break
+                                        except Exception:
+                                            pass
+                                            
+                                        # Fallback to default YouTube API
+                                        if not related:
+                                            history = SHUKLA.history.get(chat_id, []) if hasattr(SHUKLA, 'history') else []
+                                            related = await YouTube.get_related(vidid, history)
+                                            
                                         if related:
                                             db[chat_id].append({
                                                 "vidid": related["vidid"],
                                                 "file": f"vid_{related['vidid']}",
                                                 "title": related["title"],
-                                                "by": "ʀєǫυєsᴛєʀ : Spotify Radio 🟢", # ✅ Name Updated
+                                                "by": "ʀєǫυєsᴛєʀ : Spotify Radio 🟢",
                                                 "chat_id": chat_id,
                                                 "streamtype": "audio",
                                                 "dur": related.get("duration", "Unknown"),
@@ -113,7 +141,7 @@ async def skip(cli, message: Message, _, chat_id):
             if popped:
                 await auto_clean(popped)
             if not check:
-                # --- 🚀 STRICT YOUTUBE AUTOPLAY SKIP LOGIC ---
+                # --- 🚀 ALONE-X SMART AUTOPLAY SKIP LOGIC ---
                 try:
                     is_autoplay = await get_autoplay(chat_id)
                 except:
@@ -122,14 +150,42 @@ async def skip(cli, message: Message, _, chat_id):
                 if is_autoplay and popped and popped.get("vidid") not in ["telegram", "soundcloud", None]:
                     try:
                         vidid = popped["vidid"]
-                        history = SHUKLA.history.get(chat_id, []) if hasattr(SHUKLA, 'history') else []
-                        related = await YouTube.get_related(vidid, history)
+                        related = None
+                        
+                        from youtubesearchpython.__future__ import Video, VideosSearch
+                        try:
+                            video_info = await Video.get(vidid)
+                            if video_info and "channel" in video_info:
+                                channel_name = video_info["channel"].get("name", "")
+                                search_query = f"{channel_name} songs"
+                                results = VideosSearch(search_query, limit=7)
+                                res = await results.next()
+                                if res and res.get("result"):
+                                    for track in res["result"]:
+                                        if track.get("id") != vidid and track.get("duration"):
+                                            dur = track.get("duration", "0:00")
+                                            parts = dur.split(":")
+                                            duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                            related = {
+                                                "vidid": track.get("id"),
+                                                "title": track.get("title", "Unknown Title"),
+                                                "duration": dur,
+                                                "duration_sec": duration_sec
+                                            }
+                                            break
+                        except Exception:
+                            pass
+                            
+                        if not related:
+                            history = SHUKLA.history.get(chat_id, []) if hasattr(SHUKLA, 'history') else []
+                            related = await YouTube.get_related(vidid, history)
+                            
                         if related:
                             db[chat_id].append({
                                 "vidid": related["vidid"],
                                 "file": f"vid_{related['vidid']}",
                                 "title": related["title"],
-                                "by": "ʀєǫυєsᴛєʀ : Spotify Radio 🟢", # ✅ Name Updated
+                                "by": "AUTOPLAY",
                                 "chat_id": chat_id,
                                 "streamtype": "audio",
                                 "dur": related.get("duration", "Unknown"),
@@ -188,7 +244,6 @@ async def skip(cli, message: Message, _, chat_id):
         db[chat_id][0]["speed_path"] = None
         db[chat_id][0]["speed"] = 1.0
 
-    # ✅ Timer Fix applied for dynamic button
     dur = check[0].get("dur", "0:00")
     if dur == "Unknown" or dur == "0:00":
         dynamic_button = stream_markup(_, chat_id)
@@ -208,7 +263,7 @@ async def skip(cli, message: Message, _, chat_id):
         except:
             return await message.reply_text(_["call_6"])
 
-        button = stream_markup(_, chat_id) # Live Stream has no timer
+        button = stream_markup(_, chat_id)
         img = await get_thumb(videoid)
         run = await message.reply_photo(
             photo=img,
@@ -253,7 +308,7 @@ async def skip(cli, message: Message, _, chat_id):
                 check[0]["dur"],
                 user,
             ),
-            reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
+            reply_markup=InlineKeyboardMarkup(dynamic_button),
         )
         if db.get(chat_id):
             db[chat_id][0]["mystic"] = run
@@ -269,7 +324,7 @@ async def skip(cli, message: Message, _, chat_id):
         run = await message.reply_photo(
             photo=config.STREAM_IMG_URL,
             caption=_["stream_2"].format(user),
-            reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
+            reply_markup=InlineKeyboardMarkup(dynamic_button),
         )
         if db.get(chat_id):
             db[chat_id][0]["mystic"] = run
@@ -298,7 +353,7 @@ async def skip(cli, message: Message, _, chat_id):
                 caption=_["stream_1"].format(
                     config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
                 ),
-                reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
+                reply_markup=InlineKeyboardMarkup(dynamic_button),
             )
             if db.get(chat_id):
                 db[chat_id][0]["mystic"] = run
@@ -311,7 +366,7 @@ async def skip(cli, message: Message, _, chat_id):
                 caption=_["stream_1"].format(
                     config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
                 ),
-                reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
+                reply_markup=InlineKeyboardMarkup(dynamic_button),
             )
             if db.get(chat_id):
                 db[chat_id][0]["mystic"] = run
@@ -326,7 +381,7 @@ async def skip(cli, message: Message, _, chat_id):
                     check[0]["dur"],
                     user,
                 ),
-                reply_markup=InlineKeyboardMarkup(dynamic_button), # ✅ Timer Applied
+                reply_markup=InlineKeyboardMarkup(dynamic_button),
             )
             if db.get(chat_id):
                 db[chat_id][0]["mystic"] = run
