@@ -11,6 +11,7 @@ from pyrogram import Client
 from pyrogram.types import InlineKeyboardMarkup
 from pytgcalls import PyTgCalls, exceptions, types
 from pytgcalls.pytgcalls_session import PyTgCallsSession
+from youtubesearchpython.__future__ import Video, VideosSearch
 
 import config
 from SHUKLAMUSIC import LOGGER, YouTube, app
@@ -111,25 +112,51 @@ class Call(PyTgCalls):
         self.history.pop(chat_id, None)
 
     async def _prefetch_next(self, chat_id: int) -> None:
+        """Background mein next song cache karne ka function"""
         if chat_id in self.autoplay_prefetching:
             return
         self.autoplay_prefetching.add(chat_id)
         try:
-            await asyncio.sleep(3)
+            await asyncio.sleep(5) # Let the current song buffer first
             check = db.get(chat_id)
             if check and len(check) > 1:
-                return
+                return # User already has songs in queue
 
             is_autoplay = await get_autoplay(chat_id)
             if is_autoplay and check:
                 current_vidid = check[0].get("vidid")
                 if current_vidid and current_vidid not in ["telegram", "soundcloud"]:
+                    related = None
                     try:
-                        related = await YouTube.get_related(current_vidid, self.history[chat_id])
-                        if related:
-                            self.pending_autoplay[chat_id] = related
+                        # Smart ALONE-X Logic in Background
+                        video_info = await Video.get(current_vidid)
+                        if video_info and "channel" in video_info:
+                            channel_name = video_info["channel"].get("name", "")
+                            search_query = f"{channel_name} songs"
+                            results = VideosSearch(search_query, limit=7)
+                            res = await results.next()
+                            if res and res.get("result"):
+                                for track in res["result"]:
+                                    if track.get("id") != current_vidid and track.get("duration"):
+                                        dur = track.get("duration", "0:00")
+                                        parts = dur.split(":")
+                                        duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                        related = {
+                                            "vidid": track.get("id"),
+                                            "title": track.get("title", "Unknown Title"),
+                                            "duration": dur,
+                                            "duration_sec": duration_sec
+                                        }
+                                        break
                     except Exception:
                         pass
+                    
+                    if not related:
+                        history = self.history.get(chat_id, [])
+                        related = await YouTube.get_related(current_vidid, history)
+                        
+                    if related:
+                        self.pending_autoplay[chat_id] = related
         except Exception:
             pass
         finally:
@@ -168,6 +195,7 @@ class Call(PyTgCalls):
                 stream=stream,
                 config=types.GroupCallConfig(auto_start=False),
             )
+            # Yahan prefetch trigger hota hai
             asyncio.create_task(self._prefetch_next(chat_id))
         except exceptions.NoActiveGroupCall:
             raise
@@ -363,7 +391,7 @@ class Call(PyTgCalls):
                 await set_loop(chat_id, loop)
             await auto_clean(popped)
 
-            # --- STRICT YOUTUBE MUSIC AUTOPLAY FIX ---
+            # --- SMART FAST AUTOPLAY EXECUTION ---
             if not check:
                 try:
                     is_autoplay = await get_autoplay(chat_id)
@@ -376,14 +404,40 @@ class Call(PyTgCalls):
                         self.history[chat_id].append(vidid)
                         del self.history[chat_id][:-20]
 
+                        # Ye line check karegi ki kya background mein gaana cache hua tha
                         related = self.pending_autoplay.pop(chat_id, None)
 
+                        # Agar cache fail hua toh inline wahi ALONE-X logic chalega
                         if not related:
                             try:
-                                # ONLY use official related tracks (No random keyword search)
-                                related = await YouTube.get_related(vidid, self.history[chat_id])
+                                video_info = await Video.get(vidid)
+                                if video_info and "channel" in video_info:
+                                    channel_name = video_info["channel"].get("name", "")
+                                    search_query = f"{channel_name} songs"
+                                    
+                                    results = VideosSearch(search_query, limit=7)
+                                    res = await results.next()
+                                    if res and res.get("result"):
+                                        for track in res["result"]:
+                                            if track.get("id") != vidid and track.get("duration"):
+                                                dur = track.get("duration", "0:00")
+                                                parts = dur.split(":")
+                                                duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                                related = {
+                                                    "vidid": track.get("id"),
+                                                    "title": track.get("title", "Unknown Title"),
+                                                    "duration": dur,
+                                                    "duration_sec": duration_sec
+                                                }
+                                                break
                             except Exception:
-                                related = None
+                                pass
+                                
+                            if not related:
+                                try:
+                                    related = await YouTube.get_related(vidid, self.history[chat_id])
+                                except Exception:
+                                    related = None
 
                         if not related:
                             self.autoplay_failures[chat_id] += 1
@@ -394,13 +448,13 @@ class Call(PyTgCalls):
                         else:
                             self.autoplay_failures[chat_id] = 0
 
-                            # ✅ Updated Autoplay Name Here
+                            # ✅ Name completely fixed to Aᴜᴛᴏᴘʟᴀʏ
                             db[chat_id].append(
                                 {
                                     "vidid": related["vidid"],
                                     "file": f"vid_{related['vidid']}",
                                     "title": related["title"],
-                                    "by": "𝙰𝚄𝚃𝙾𝙿𝙻𝙰𝚈",
+                                    "by": "Aᴜᴛᴏᴘʟᴀʏ",
                                     "chat_id": popped.get("chat_id", chat_id),
                                     "streamtype": "audio",
                                     "dur": related.get("duration", "Unknown"),
