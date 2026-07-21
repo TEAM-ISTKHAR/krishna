@@ -1,3 +1,8 @@
+# Copyright (c) 2026 THE SHIV
+# Licensed under the MIT License.
+# This file is part of MahiMusic
+# DEVELOPER - THE SHIV
+
 import asyncio
 import os
 import random
@@ -201,6 +206,7 @@ class Call(PyTgCalls):
                                 }
 
                                 ignore_artist_kws = ["hindi", "punjabi", "bhojpuri", "haryanvi", "tamil", "telugu", "english", "bollywood", "pollywood", "tollywood", "kollywood", "hollywood", "pop", "t-series", "zee music", "speed records"]
+                                blocked_words = ["news", "vlog", "interview", "podcast", "episode", "trailer", "teaser", "movie", "review", "reaction", "unboxing", "investigates", "documentary", "short", "scene"]
 
                                 detected_lang = ""
                                 detected_artist = ""
@@ -225,17 +231,16 @@ class Call(PyTgCalls):
                                 # Cleaning Title for Anti-Duplicate Check
                                 clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', title, flags=re.IGNORECASE).strip().lower()
                                 
-                                # Build Search Query
+                                # Build Search Query (Strict Music Search)
                                 search_parts = []
                                 if detected_artist: search_parts.append(detected_artist)
                                 if detected_mood: search_parts.append(detected_mood)
                                 if detected_lang: search_parts.append(detected_lang)
                                 
                                 if not search_parts:
-                                    # Fallback if dictionary finds nothing
-                                    search_query = f"{clean_title} similar audio songs"
+                                    search_query = f"{clean_title} official audio song"
                                 else:
-                                    search_query = f"{' '.join(search_parts)} hit songs"
+                                    search_query = f"{' '.join(search_parts)} hit official audio song"
 
                                 results = VideosSearch(search_query, limit=15)
                                 res = await results.next()
@@ -248,12 +253,21 @@ class Call(PyTgCalls):
                                             track_title = track.get("title", "")
                                             track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', track_title, flags=re.IGNORECASE).strip().lower()
                                             
+                                            # 🛑 ANTI-TRASH CHECK: Filter News, Vlogs, Podcasts
+                                            is_trash = any(word in track_clean.lower() for word in blocked_words)
+                                            if is_trash:
+                                                continue
+                                                
+                                            # ⏱ DURATION FILTER: Ignore shorts (< 1.5 mins) & long documentaries/news (> 10 mins)
+                                            dur = track.get("duration", "0:00")
+                                            parts = dur.split(":")
+                                            duration_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
+                                            
+                                            if duration_sec < 90 or duration_sec > 600:
+                                                continue
+
                                             # ANTI-DUPLICATE: Must be a different song
                                             if track_clean and track_clean != clean_title and clean_title not in track_clean:
-                                                dur = track.get("duration", "0:00")
-                                                parts = dur.split(":")
-                                                duration_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
-                                                
                                                 related = {
                                                     "vidid": track_id,
                                                     "title": track.get("title", "Unknown Title"),
@@ -589,6 +603,7 @@ class Call(PyTgCalls):
                                         }
 
                                         ignore_artist_kws = ["hindi", "punjabi", "bhojpuri", "haryanvi", "tamil", "telugu", "english", "bollywood", "pollywood", "tollywood", "kollywood", "hollywood", "pop", "t-series", "zee music", "speed records"]
+                                        blocked_words = ["news", "vlog", "interview", "podcast", "episode", "trailer", "teaser", "movie", "review", "reaction", "unboxing", "investigates", "documentary", "short", "scene"]
 
                                         detected_lang = ""
                                         detected_artist = ""
@@ -618,9 +633,9 @@ class Call(PyTgCalls):
                                         if detected_lang: search_parts.append(detected_lang)
                                         
                                         if not search_parts:
-                                            search_query = f"{clean_title} similar audio songs"
+                                            search_query = f"{clean_title} official audio song"
                                         else:
-                                            search_query = f"{' '.join(search_parts)} hit songs"
+                                            search_query = f"{' '.join(search_parts)} hit official audio song"
 
                                         results = VideosSearch(search_query, limit=15)
                                         res = await results.next()
@@ -632,11 +647,20 @@ class Call(PyTgCalls):
                                                     track_title = track.get("title", "")
                                                     track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', track_title, flags=re.IGNORECASE).strip().lower()
                                                     
+                                                    # 🛑 ANTI-TRASH CHECK: Filter News, Vlogs, Podcasts
+                                                    is_trash = any(word in track_clean.lower() for word in blocked_words)
+                                                    if is_trash:
+                                                        continue
+                                                    
+                                                    # ⏱ DURATION FILTER: Ignore shorts (< 1.5 mins) & long documentaries/news (> 10 mins)
+                                                    dur = track.get("duration", "0:00")
+                                                    parts = dur.split(":")
+                                                    duration_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
+                                                    if duration_sec < 90 or duration_sec > 600:
+                                                        continue
+
+                                                    # ANTI-DUPLICATE: Must be a different song
                                                     if track_clean and track_clean != clean_title and clean_title not in track_clean:
-                                                        dur = track.get("duration", "0:00")
-                                                        parts = dur.split(":")
-                                                        duration_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
-                                                        
                                                         related = {
                                                             "vidid": track_id,
                                                             "title": track.get("title", "Unknown Title"),
