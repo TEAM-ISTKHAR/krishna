@@ -126,45 +126,56 @@ class Call(PyTgCalls):
             if is_autoplay and check:
                 current_vidid = check[0].get("vidid")
                 if current_vidid and current_vidid not in ["telegram", "soundcloud"]:
-                    related = None
                     history = self.history.get(chat_id, [])
+                    related = None
+                    
                     try:
-                        # Smart ALONE-X Logic in Background
-                        video_info = await Video.get(current_vidid)
-                        if video_info and "channel" in video_info:
-                            channel_name = video_info["channel"].get("name", "")
-                            search_query = f"{channel_name} songs"
-                            
-                            # Limit badhakar zyada pool laya taaki randomization achha ho
-                            results = VideosSearch(search_query, limit=20)
-                            res = await results.next()
-                            
-                            valid_tracks = []
-                            if res and res.get("result"):
-                                for track in res["result"]:
-                                    track_id = track.get("id")
-                                    # History check - purane 20 gaane repeat nahi honge
-                                    if track_id and track_id != current_vidid and track_id not in history:
-                                        if track.get("duration"):
-                                            dur = track.get("duration", "0:00")
-                                            parts = dur.split(":")
-                                            duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                                            valid_tracks.append({
-                                                "vidid": track_id,
-                                                "title": track.get("title", "Unknown Title"),
-                                                "duration": dur,
-                                                "duration_sec": duration_sec
-                                            })
-                                
-                                # Random choice lagaya taaki random gaana uthe us artist ka
-                                if valid_tracks:
-                                    related = random.choice(valid_tracks)
+                        # 1st Priority: YouTube's Native Algorithm
+                        related = await YouTube.get_related(current_vidid, history)
                     except Exception:
                         pass
-                    
-                    if not related:
-                        related = await YouTube.get_related(current_vidid, history)
                         
+                    if not related:
+                        try:
+                            # 2nd Priority: Strict Artist & Title Anti-Duplicate Match
+                            video_info = await Video.get(current_vidid)
+                            if video_info:
+                                title = video_info.get("title", "")
+                                channel_name = video_info.get("channel", {}).get("name", "")
+                                
+                                # Current song ka naam saaf karna (Lyrical/Official hata ke)
+                                clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix', '', title, flags=re.IGNORECASE).strip().lower()
+                                
+                                # Usi artist ke baaki gaane search karenge
+                                search_query = f"{channel_name} superhit songs"
+                                
+                                results = VideosSearch(search_query, limit=15)
+                                res = await results.next()
+                                
+                                if res and res.get("result"):
+                                    for track in res["result"]:
+                                        track_id = track.get("id")
+                                        
+                                        if track_id and track_id != current_vidid and track_id not in history:
+                                            track_title = track.get("title", "")
+                                            track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix', '', track_title, flags=re.IGNORECASE).strip().lower()
+                                            
+                                            # ANTI-DUPLICATE CHECK: Naye gaane ke naam me purane gaane ka naam nahi aana chahiye
+                                            if track_clean and track_clean != clean_title and clean_title not in track_clean:
+                                                dur = track.get("duration", "0:00")
+                                                parts = dur.split(":")
+                                                duration_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
+                                                
+                                                related = {
+                                                    "vidid": track_id,
+                                                    "title": track.get("title", "Unknown Title"),
+                                                    "duration": dur,
+                                                    "duration_sec": duration_sec
+                                                }
+                                                break # Ek valid different gaana mil gaya
+                        except Exception:
+                            pass
+                    
                     if related:
                         self.pending_autoplay[chat_id] = related
         except Exception:
@@ -415,47 +426,51 @@ class Call(PyTgCalls):
                         self.history[chat_id].append(vidid)
                         del self.history[chat_id][:-20] # Keep recent 20 songs
 
-                        # Ye line check karegi ki kya background mein gaana cache hua tha
+                        # Prefetch check
                         related = self.pending_autoplay.pop(chat_id, None)
 
-                        # Agar cache fail hua toh inline wahi ALONE-X logic chalega
+                        # Agar cache fail hua toh fir se strict search/match karega
                         if not related:
                             try:
-                                video_info = await Video.get(vidid)
-                                if video_info and "channel" in video_info:
-                                    channel_name = video_info["channel"].get("name", "")
-                                    search_query = f"{channel_name} songs"
-                                    
-                                    results = VideosSearch(search_query, limit=20)
-                                    res = await results.next()
-                                    
-                                    valid_tracks = []
-                                    if res and res.get("result"):
-                                        for track in res["result"]:
-                                            track_id = track.get("id")
-                                            if track_id and track_id != vidid and track_id not in self.history[chat_id]:
-                                                if track.get("duration"):
-                                                    dur = track.get("duration", "0:00")
-                                                    parts = dur.split(":")
-                                                    duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                                                    valid_tracks.append({
-                                                        "vidid": track_id,
-                                                        "title": track.get("title", "Unknown Title"),
-                                                        "duration": dur,
-                                                        "duration_sec": duration_sec
-                                                    })
-                                        
-                                        # Random artist song matching same language dynamically
-                                        if valid_tracks:
-                                            related = random.choice(valid_tracks)
+                                related = await YouTube.get_related(vidid, self.history[chat_id])
                             except Exception:
                                 pass
-                                
+                            
                             if not related:
                                 try:
-                                    related = await YouTube.get_related(vidid, self.history[chat_id])
+                                    video_info = await Video.get(vidid)
+                                    if video_info:
+                                        title = video_info.get("title", "")
+                                        channel_name = video_info.get("channel", {}).get("name", "")
+                                        
+                                        clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix', '', title, flags=re.IGNORECASE).strip().lower()
+                                        
+                                        search_query = f"{channel_name} hit songs"
+                                        results = VideosSearch(search_query, limit=15)
+                                        res = await results.next()
+                                        
+                                        if res and res.get("result"):
+                                            for track in res["result"]:
+                                                track_id = track.get("id")
+                                                if track_id and track_id != vidid and track_id not in self.history[chat_id]:
+                                                    track_title = track.get("title", "")
+                                                    track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix', '', track_title, flags=re.IGNORECASE).strip().lower()
+                                                    
+                                                    # ANTI-DUPLICATE CHECK
+                                                    if track_clean and track_clean != clean_title and clean_title not in track_clean:
+                                                        dur = track.get("duration", "0:00")
+                                                        parts = dur.split(":")
+                                                        duration_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
+                                                        
+                                                        related = {
+                                                            "vidid": track_id,
+                                                            "title": track.get("title", "Unknown Title"),
+                                                            "duration": dur,
+                                                            "duration_sec": duration_sec
+                                                        }
+                                                        break # DIFFERENT song found!
                                 except Exception:
-                                    related = None
+                                    pass
 
                         if not related:
                             self.autoplay_failures[chat_id] += 1
@@ -466,7 +481,6 @@ class Call(PyTgCalls):
                         else:
                             self.autoplay_failures[chat_id] = 0
 
-                            # ✅ Name completely fixed to Aᴜᴛᴏᴘʟᴀʏ
                             db[chat_id].append(
                                 {
                                     "vidid": related["vidid"],
