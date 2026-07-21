@@ -427,59 +427,63 @@ class YouTubeAPI:
 
     async def get_related(self, videoid: str, history: list = None, *args, **kwargs):
         """
-        Smooth Autoplay with 100% working fallback
-        Handles the format exactly as skip.py expects
+        Smart Autoplay: Gets real video details and prevents repeating songs.
         """
-        try:
-            related = None
+        if history is None:
+            history = []
             
-            # Tarika 1: Fast Web Scraping
+        try:
+            # 1. Scrape related IDs
             url = f"https://www.youtube.com/watch?v={videoid}"
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=5) as response:
                     if response.status == 200:
                         html = await response.text()
                         video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+                        
+                        # Find a valid ID not in history
                         for vid in video_ids:
-                            if vid != videoid:
-                                related = {
-                                    "vidid": vid,
-                                    "title": "YouTube Autoplay Track",
-                                    "duration": "0:00",
-                                    "duration_sec": 0
-                                }
-                                break 
-            
-            if related:
-                return related
+                            if vid != videoid and vid not in history:
+                                # Fetch REAL details using VideosSearch
+                                results = VideosSearch(f"https://www.youtube.com/watch?v={vid}", limit=1)
+                                res = await results.next()
+                                if res and res.get("result"):
+                                    track = res["result"][0]
+                                    dur = track.get("duration", "0:00")
+                                    # Convert duration to seconds properly
+                                    parts = dur.split(":")
+                                    duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                    return {
+                                        "vidid": track["id"],
+                                        "title": track.get("title", "Unknown Title"),
+                                        "duration": dur,
+                                        "duration_sec": duration_sec
+                                    }
 
-            # Tarika 2: Py-yt Search Fallback (Agar IP block ho ya limit lag jaye)
-            results = VideosSearch("trending lo-fi hindi songs", limit=5)
-            for result in (await results.next())["result"]:
-                if result["id"] != videoid:
-                    dur = result.get("duration", "0:00")
+            # 2. Search Fallback (If scraping fails or gets stuck)
+            results = VideosSearch("trending lo-fi hindi songs", limit=10)
+            res = await results.next()
+            for track in res.get("result", []):
+                if track["id"] not in history and track["id"] != videoid:
+                    dur = track.get("duration", "0:00")
                     parts = dur.split(":")
                     duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                    related = {
-                        "vidid": result["id"],
-                        "title": result.get("title", "Unknown Title"),
+                    return {
+                        "vidid": track["id"],
+                        "title": track.get("title", "Unknown Title"),
                         "duration": dur,
                         "duration_sec": duration_sec
                     }
-                    break
-            
-            if related:
-                return related
 
         except Exception:
             pass
 
-        # Tarika 3: Ultimate Fallback (VC kabhi leave nahi karega)
-        return {
-            "vidid": "kffacxfA7G4", 
-            "title": "Fallback Track",
-            "duration": "0:00",
-            "duration_sec": 0
-        }
+        # 3. Ultimate Fallback (100% safe tracks if everything fails)
+        import random
+        safe_tracks = [
+            {"vidid": "kffacxfA7G4", "title": "Aesthetic Lofi Mashup", "duration": "3:00", "duration_sec": 180},
+            {"vidid": "Yq-q6_y4-C4", "title": "Hindi Lofi Mix", "duration": "4:00", "duration_sec": 240}
+        ]
+        return random.choice(safe_tracks)
 
 YouTube = YouTubeAPI()
