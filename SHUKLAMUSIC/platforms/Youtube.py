@@ -1,5 +1,8 @@
 # ---------------------------------------------------------------
-# 🔸 MUSIC Api Youtube.py file (Fixed with yt-dlp & ALONE-X Logic)
+# 🔸 ShrutiMusic Api Youtube.py file.
+# 🔹 Developed & Maintained by: Nand Yaduvanshi (https://github.com/NoxxOP)
+# 📅 Copyright © 2025 – All Rights Reserved
+# ❤️ Made with dedication and love by NoxxOP & itzshukla
 # ---------------------------------------------------------------
 
 import asyncio
@@ -10,15 +13,125 @@ import yt_dlp
 from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
 from py_yt import VideosSearch, Playlist
-from youtubesearchpython.__future__ import Video, VideosSearch as FutureVideosSearch
+import aiohttp
+
+API_URL = os.environ.get("API_URL", "https://teaminflex.xyz")
+
+API_KEY = os.environ.get("API_KEY", "INFLEX99600328D") 
 
 DOWNLOAD_DIR = "downloads"
+
 
 def time_to_seconds(time):
     stringt = str(time)
     return sum(int(x) * 60 ** i for i, x in enumerate(reversed(stringt.split(":"))))
 
-# ── DIRECT YT-DLP DOWNLOADERS (REPLACED SHRUTI API) ──
+
+# ── Conversion lock: prevents two coroutines converting the same file ──
+import threading as _threading
+_conv_locks: dict = {}
+_conv_lock_guard = _threading.Lock()
+
+
+def _get_conv_lock(path: str):
+    with _conv_lock_guard:
+        if path not in _conv_locks:
+            _conv_locks[path] = asyncio.Lock()
+        return _conv_locks[path]
+
+
+def _wav_path(mp3: str) -> str:
+    return mp3.replace(".mp3", ".wav")
+
+
+def _tmp_wav_path(mp3: str) -> str:
+    return mp3.replace(".mp3", ".wav.tmp")
+
+
+async def _convert_to_wav(mp3_path: str) -> str:
+    """
+    Pre-convert MP3 → 48 kHz stereo PCM WAV so pytgcalls streams with
+    zero decode overhead (only Opus encode needed during playback).
+    Uses a .tmp file + atomic rename to prevent partial-file reads.
+    """
+    wav  = _wav_path(mp3_path)
+    tmp  = _tmp_wav_path(mp3_path)
+
+    # Fast path – WAV already ready
+    if os.path.exists(wav) and os.path.getsize(wav) > 0:
+        return wav
+
+    # Serialise per-file so two callers don't race
+    lock = _get_conv_lock(mp3_path)
+    async with lock:
+        # Re-check after acquiring lock
+        if os.path.exists(wav) and os.path.getsize(wav) > 0:
+            return wav
+
+        # Clean up any leftover .tmp
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-y",
+                "-threads", "0",          # multi-threaded decode
+                "-i", mp3_path,
+                "-ar", "48000",           # match pytgcalls AudioQuality.HIGH
+                "-ac", "2",               # stereo
+                "-acodec", "pcm_s16le",   # raw PCM – zero decode overhead during stream
+                "-map_metadata", "-1",    # strip tags (smaller, faster seek)
+                tmp,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.wait()
+
+            if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+                os.replace(tmp, wav)       # atomic rename
+                return wav
+        except Exception:
+            pass
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+
+    return mp3_path   # fallback: stream MP3 if conversion failed
+
+
+def _cleanup_wav_cache(keep: int = 25) -> None:
+    """
+    Keep only the <keep> most-recently-used WAV files.
+    Called asynchronously so it never blocks the event loop.
+    """
+    try:
+        wavs = [
+            os.path.join(DOWNLOAD_DIR, f)
+            for f in os.listdir(DOWNLOAD_DIR)
+            if f.endswith(".wav")
+        ]
+        if len(wavs) <= keep:
+            return
+        # Sort oldest-accessed first
+        wavs.sort(key=lambda p: os.path.getatime(p))
+        for old in wavs[: len(wavs) - keep]:
+            try:
+                os.remove(old)
+                # Also remove matching .mp3 to free space
+                mp3 = old.replace(".wav", ".mp3")
+                if os.path.exists(mp3):
+                    os.remove(mp3)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 async def download_song(link: str) -> str:
     video_id = link.split("v=")[-1].split("&")[0] if "v=" in link else link
@@ -27,29 +140,53 @@ async def download_song(link: str) -> str:
 
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     mp3_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp3")
+    wav_path = _wav_path(mp3_path)
 
-    if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0:
-        return mp3_path
+    # ── 1. Return cached WAV (lag-free stream, zero conversion wait) ──
+    if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+        return wav_path
 
-    loop = asyncio.get_running_loop()
-    def _dl():
-        opts = {
-            "format": "bestaudio/best",
-            "extractaudio": True,
-            "audioformat": "mp3",
-            "outtmpl": f"{DOWNLOAD_DIR}/%(id)s.%(ext)s",
-            "restrictfilenames": True,
-            "noplaylist": True,
-            "quiet": True,
-        }
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([link])
-                return mp3_path
-        except Exception:
+    # ── 2. Download MP3 from API if not cached ──
+    if not (os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0):
+        downloaded = False
+        for attempt in range(2):          # 1 retry on failure
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{API_URL}/download",
+                        params={"url": video_id, "type": "audio", "api_key": API_KEY},
+                        timeout=aiohttp.ClientTimeout(total=300),
+                    ) as resp:
+                        if resp.status != 200:
+                            break
+                        tmp_dl = mp3_path + ".dl"
+                        with open(tmp_dl, "wb") as f:
+                            async for chunk in resp.content.iter_chunked(131072):
+                                f.write(chunk)
+                        if os.path.exists(tmp_dl) and os.path.getsize(tmp_dl) > 0:
+                            os.replace(tmp_dl, mp3_path)
+                            downloaded = True
+                            break
+            except Exception:
+                if os.path.exists(mp3_path + ".dl"):
+                    try:
+                        os.remove(mp3_path + ".dl")
+                    except Exception:
+                        pass
+                if attempt == 0:
+                    await asyncio.sleep(2)   # brief pause before retry
+
+        if not downloaded or not (os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0):
             return None
-            
-    return await loop.run_in_executor(None, _dl)
+
+    # ── 3. Pre-convert to WAV (blocks only for conversion, not download) ──
+    result = await _convert_to_wav(mp3_path)
+
+    # ── 4. Background cache housekeeping (non-blocking) ──
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _cleanup_wav_cache, 25)
+
+    return result
 
 
 async def download_video(link: str) -> str:
@@ -59,29 +196,31 @@ async def download_video(link: str) -> str:
 
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     file_path = os.path.join(DOWNLOAD_DIR, f"{video_id}.mp4")
-
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         return file_path
 
-    loop = asyncio.get_running_loop()
-    def _dl():
-        opts = {
-            "format": "(bestvideo[height<=?720][width<=?1280][ext=mp4])+(bestaudio[ext=m4a])",
-            "outtmpl": f"{DOWNLOAD_DIR}/%(id)s.%(ext)s",
-            "restrictfilenames": True,
-            "noplaylist": True,
-            "quiet": True,
-        }
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([link])
-                return file_path
-        except Exception:
-            return None
-
-    return await loop.run_in_executor(None, _dl)
-
-
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{API_URL}/download",
+                params={"url": video_id, "type": "video", "api_key": API_KEY},
+                timeout=aiohttp.ClientTimeout(total=600)
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                with open(file_path, "wb") as f:
+                    async for chunk in resp.content.iter_chunked(131072):
+                        f.write(chunk)
+        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+            return file_path
+        return None
+    except Exception:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+        return None
 class YouTubeAPI:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
@@ -184,6 +323,7 @@ class YouTubeAPI:
                 continue
             ids.append(vid)
         return ids
+
     async def track(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
@@ -270,7 +410,7 @@ class YouTubeAPI:
         songvideo: Union[bool, str] = None,
         format_id: Union[bool, str] = None,
         title: Union[bool, str] = None,
-    ) -> tuple:
+    ) -> str:
         if videoid:
             link = self.base + link
         try:
@@ -284,51 +424,32 @@ class YouTubeAPI:
         except Exception:
             return None, False
 
-    # --- 🚀 ALONE-X SMART AUTOPLAY FETCHER ---
-    async def get_related(self, videoid: str, history: list = []) -> dict:
+    async def autoplay(self, videoid: str):
+        """
+        Smooth and fast autoplay function to get related video ID.
+        Uses aiohttp for non-blocking fast requests.
+        """
         try:
-            video_info = await Video.get(videoid)
-            if video_info and "channel" in video_info:
-                channel_name = video_info["channel"].get("name", "")
-                search_query = f"{channel_name} songs"
-                results = FutureVideosSearch(search_query, limit=10)
-                res = await results.next()
-                if res and res.get("result"):
-                    for track in res["result"]:
-                        track_id = track.get("id")
-                        if track_id != videoid and track_id not in history and track.get("duration"):
-                            dur = track.get("duration", "0:00")
-                            parts = dur.split(":")
-                            duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                            return {
-                                "vidid": track_id,
-                                "title": track.get("title", "Unknown Title"),
-                                "duration": dur,
-                                "duration_sec": duration_sec
-                            }
-        except Exception:
-            pass
+            url = f"https://www.youtube.com/watch?v={videoid}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                    if response.status != 200:
+                        return None
+                    html = await response.text()
 
-        # Fallback Strict Search
-        try:
-            search_query = f"https://www.youtube.com/watch?v={videoid}"
-            results = FutureVideosSearch(search_query, limit=5)
-            res = await results.next()
-            if res and res.get("result"):
-                for track in res["result"]:
-                    track_id = track.get("id")
-                    if track_id != videoid and track_id not in history and track.get("duration"):
-                        dur = track.get("duration", "0:00")
-                        parts = dur.split(":")
-                        duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                        return {
-                            "vidid": track_id,
-                            "title": track.get("title", "Unknown Title"),
-                            "duration": dur,
-                            "duration_sec": duration_sec
-                        }
+            video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+
+            related_videos = []
+            for vid in video_ids:
+                if vid != videoid and vid not in related_videos:
+                    related_videos.append(vid)
+
+            if related_videos:
+                return related_videos[:5]
+            
+            return None
         except Exception:
             return None
-        return None
+
 
 YouTube = YouTubeAPI()
