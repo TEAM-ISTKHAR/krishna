@@ -424,32 +424,40 @@ class YouTubeAPI:
         except Exception:
             return None, False
 
-    async def get_related(self, videoid: str):
+    async def get_related(self, videoid: str, *args, **kwargs):
         """
-        Smooth and fast autoplay function to get related video ID.
-        Uses aiohttp for non-blocking fast requests.
+        Smooth Autoplay with 100% working fallback
         """
         try:
+            related_videos = []
+            
+            # Tarika 1: Fast Web Scraping
             url = f"https://www.youtube.com/watch?v={videoid}"
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                    if response.status != 200:
-                        return None
-                    html = await response.text()
-
-            video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
-
-            related_videos = []
-            for vid in video_ids:
-                if vid != videoid and vid not in related_videos:
-                    related_videos.append(vid)
-
-            if related_videos:
-                return related_videos[:5]
+                async with session.get(url, timeout=5) as response:
+                    if response.status == 200:
+                        html = await response.text()
+                        video_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+                        for vid in video_ids:
+                            if vid != videoid and vid not in related_videos:
+                                related_videos.append(vid)
             
-            return None
+            if related_videos:
+                return related_videos[:10]
+
+            # Tarika 2: Py-yt Search Fallback (Agar IP block ho ya limit lag jaye)
+            results = VideosSearch("trending lo-fi hindi songs", limit=10)
+            for result in (await results.next())["result"]:
+                related_videos.append(result["id"])
+            
+            if related_videos:
+                return related_videos
+
         except Exception:
-            return None
+            pass
+
+        # Tarika 3: Ultimate Fallback (VC kabhi leave nahi karega)
+        return ["kffacxfA7G4", "Yq-q6_y4-C4", "g20IG9_5ZOM", "7eXGZ1D0oYI", "Q7aEEyLzKTY"]
 
 
 YouTube = YouTubeAPI()
