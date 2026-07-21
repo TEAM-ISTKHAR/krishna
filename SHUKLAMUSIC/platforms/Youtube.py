@@ -597,4 +597,11 @@ class YouTubeAPI:
         except Exception:
             pass
 
+        # --- 3. Ultimate Fallback (100% safe tracks if everything fails) ---
+        safe_tracks = [
+            {"vidid": "kffacxfA7G4", "title": "Aesthetic Lofi Mashup", "duration": "3:00", "duration_sec": 180},
+            {"vidid": "Yq-q6_y4-C4", "title": "Hindi Lofi Mix", "duration": "4:00", "duration_sec": 240}
+        ]
+        return random.choice(safe_tracks)
+
 YouTube = YouTubeAPI()
