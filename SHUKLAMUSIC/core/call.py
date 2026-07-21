@@ -127,32 +127,42 @@ class Call(PyTgCalls):
                 current_vidid = check[0].get("vidid")
                 if current_vidid and current_vidid not in ["telegram", "soundcloud"]:
                     related = None
+                    history = self.history.get(chat_id, [])
                     try:
                         # Smart ALONE-X Logic in Background
                         video_info = await Video.get(current_vidid)
                         if video_info and "channel" in video_info:
                             channel_name = video_info["channel"].get("name", "")
                             search_query = f"{channel_name} songs"
-                            results = VideosSearch(search_query, limit=7)
+                            
+                            # Limit badhakar zyada pool laya taaki randomization achha ho
+                            results = VideosSearch(search_query, limit=20)
                             res = await results.next()
+                            
+                            valid_tracks = []
                             if res and res.get("result"):
                                 for track in res["result"]:
-                                    if track.get("id") != current_vidid and track.get("duration"):
-                                        dur = track.get("duration", "0:00")
-                                        parts = dur.split(":")
-                                        duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                                        related = {
-                                            "vidid": track.get("id"),
-                                            "title": track.get("title", "Unknown Title"),
-                                            "duration": dur,
-                                            "duration_sec": duration_sec
-                                        }
-                                        break
+                                    track_id = track.get("id")
+                                    # History check - purane 20 gaane repeat nahi honge
+                                    if track_id and track_id != current_vidid and track_id not in history:
+                                        if track.get("duration"):
+                                            dur = track.get("duration", "0:00")
+                                            parts = dur.split(":")
+                                            duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                            valid_tracks.append({
+                                                "vidid": track_id,
+                                                "title": track.get("title", "Unknown Title"),
+                                                "duration": dur,
+                                                "duration_sec": duration_sec
+                                            })
+                                
+                                # Random choice lagaya taaki random gaana uthe us artist ka
+                                if valid_tracks:
+                                    related = random.choice(valid_tracks)
                     except Exception:
                         pass
                     
                     if not related:
-                        history = self.history.get(chat_id, [])
                         related = await YouTube.get_related(current_vidid, history)
                         
                     if related:
@@ -315,6 +325,7 @@ class Call(PyTgCalls):
             await assistant.leave_call(chat_id, close=False)
         except Exception:
             pass
+
     async def skip_stream(
         self,
         chat_id: int,
@@ -402,7 +413,7 @@ class Call(PyTgCalls):
                     vidid = popped.get("vidid")
                     if vidid and vidid not in ["telegram", "soundcloud"]:
                         self.history[chat_id].append(vidid)
-                        del self.history[chat_id][:-20]
+                        del self.history[chat_id][:-20] # Keep recent 20 songs
 
                         # Ye line check karegi ki kya background mein gaana cache hua tha
                         related = self.pending_autoplay.pop(chat_id, None)
@@ -415,21 +426,28 @@ class Call(PyTgCalls):
                                     channel_name = video_info["channel"].get("name", "")
                                     search_query = f"{channel_name} songs"
                                     
-                                    results = VideosSearch(search_query, limit=7)
+                                    results = VideosSearch(search_query, limit=20)
                                     res = await results.next()
+                                    
+                                    valid_tracks = []
                                     if res and res.get("result"):
                                         for track in res["result"]:
-                                            if track.get("id") != vidid and track.get("duration"):
-                                                dur = track.get("duration", "0:00")
-                                                parts = dur.split(":")
-                                                duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                                                related = {
-                                                    "vidid": track.get("id"),
-                                                    "title": track.get("title", "Unknown Title"),
-                                                    "duration": dur,
-                                                    "duration_sec": duration_sec
-                                                }
-                                                break
+                                            track_id = track.get("id")
+                                            if track_id and track_id != vidid and track_id not in self.history[chat_id]:
+                                                if track.get("duration"):
+                                                    dur = track.get("duration", "0:00")
+                                                    parts = dur.split(":")
+                                                    duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                                    valid_tracks.append({
+                                                        "vidid": track_id,
+                                                        "title": track.get("title", "Unknown Title"),
+                                                        "duration": dur,
+                                                        "duration_sec": duration_sec
+                                                    })
+                                        
+                                        # Random artist song matching same language dynamically
+                                        if valid_tracks:
+                                            related = random.choice(valid_tracks)
                             except Exception:
                                 pass
                                 
