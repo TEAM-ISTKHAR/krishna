@@ -406,13 +406,20 @@ class YouTubeAPI:
     async def get_related(self, videoid: str, history: list = None, *args, **kwargs):
         """
         Ultra Smart Autoplay Engine: 
-        Uses Language, Mood & Artist matching Dictionary with Anti-Duplicate filtering.
+        Uses Language, Mood & Artist matching Dictionary with Anti-Trash & Anti-Duplicate filtering.
         """
         if history is None:
             history = []
             
         try:
-            # --- 1. ULTRA SMART DICTIONARY MATCHER (MOOD, LANG, ARTIST) ---
+            # 🛑 STRICT ANTI-TRASH FILTER
+            blocked_words = [
+                "news", "vlog", "interview", "podcast", "episode", "trailer", 
+                "teaser", "movie", "review", "reaction", "unboxing", "investigates", 
+                "documentary", "short", "scene"
+            ]
+
+            # --- 1. ULTRA SMART DICTIONARY MATCHER ---
             results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
             res = await results.next()
             
@@ -505,16 +512,16 @@ class YouTubeAPI:
                 # Cleaning Title for Anti-Duplicate Check
                 clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', title, flags=re.IGNORECASE).strip().lower()
                 
-                # Build Search Query
+                # Build Search Query: 🟢 STRICT MUSIC FORCE ("official audio song")
                 search_parts = []
                 if detected_artist: search_parts.append(detected_artist)
                 if detected_mood: search_parts.append(detected_mood)
                 if detected_lang: search_parts.append(detected_lang)
                 
                 if not search_parts:
-                    search_query = f"{clean_title} similar audio songs"
+                    search_query = f"{clean_title} official audio song"
                 else:
-                    search_query = f"{' '.join(search_parts)} hit songs"
+                    search_query = f"{' '.join(search_parts)} hit official audio song"
 
                 search_results = VideosSearch(search_query, limit=15)
                 res_search = await search_results.next()
@@ -527,12 +534,21 @@ class YouTubeAPI:
                             track_title = track.get("title", "")
                             track_clean = re.sub(r'\(.*?\)|\[.*?\]|official|lyrical|video|audio|remix|hd|4k', '', track_title, flags=re.IGNORECASE).strip().lower()
                             
+                            # 🛑 ANTI-TRASH CHECK: Filter News & Vlogs
+                            is_trash = any(word in track_clean for word in blocked_words)
+                            if is_trash:
+                                continue
+                            
+                            # ⏱ DURATION FILTER: Ignore shorts (< 1.5 mins) & long documentaries/news (> 10 mins)
+                            dur = track.get("duration", "0:00")
+                            parts = dur.split(":")
+                            duration_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
+                            
+                            if duration_sec < 90 or duration_sec > 600:
+                                continue
+
                             # ANTI-DUPLICATE: Must be a different song
                             if track_clean and track_clean != clean_title and clean_title not in track_clean:
-                                dur = track.get("duration", "0:00")
-                                parts = dur.split(":")
-                                duration_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
-                                
                                 return {
                                     "vidid": track_id,
                                     "title": track.get("title", "Unknown Title"),
@@ -542,7 +558,7 @@ class YouTubeAPI:
         except Exception:
             pass
 
-        # --- 2. Regular YouTube Scrape Fallback ---
+        # --- 2. Regular YouTube Scrape Fallback (Strict Music Filter) ---
         try:
             url = f"https://www.youtube.com/watch?v={videoid}"
             async with aiohttp.ClientSession() as session:
@@ -553,13 +569,25 @@ class YouTubeAPI:
                         
                         for vid in video_ids:
                             if vid != videoid and vid not in history:
-                                results = VideosSearch(f"https://www.youtube.com/watch?v={vid}", limit=1)
+                                results = VideosSearch(f"https://www.youtube.com/watch?v={vid} official audio song", limit=1)
                                 res = await results.next()
                                 if res and res.get("result"):
                                     track = res["result"][0]
+                                    track_title = track.get("title", "").lower()
+
+                                    # 🛑 ANTI-TRASH CHECK
+                                    is_trash = any(word in track_title for word in blocked_words)
+                                    if is_trash:
+                                        continue
+
                                     dur = track.get("duration", "0:00")
                                     parts = dur.split(":")
                                     duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
+                                    
+                                    # ⏱ DURATION FILTER
+                                    if duration_sec < 90 or duration_sec > 600:
+                                        continue
+
                                     return {
                                         "vidid": track["id"],
                                         "title": track.get("title", "Unknown Title"),
@@ -568,12 +596,5 @@ class YouTubeAPI:
                                     }
         except Exception:
             pass
-
-        # --- 3. Ultimate Fallback (100% safe tracks if everything fails) ---
-        safe_tracks = [
-            {"vidid": "kffacxfA7G4", "title": "Aesthetic Lofi Mashup", "duration": "3:00", "duration_sec": 180},
-            {"vidid": "Yq-q6_y4-C4", "title": "Hindi Lofi Mix", "duration": "4:00", "duration_sec": 240}
-        ]
-        return random.choice(safe_tracks)
 
 YouTube = YouTubeAPI()
