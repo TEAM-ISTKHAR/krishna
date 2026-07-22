@@ -9,10 +9,6 @@ from ntgcalls import TelegramServerError
 from pyrogram import Client
 from pyrogram.enums import ChatType, ButtonStyle
 from pyrogram.errors import ChatAdminRequired
-from pyrogram.handlers import RawUpdateHandler
-from pyrogram.raw.functions.channels import GetFullChannel
-from pyrogram.raw.functions.messages import GetFullChat
-from pyrogram.raw.types import PeerUser, UpdateGroupCallParticipants
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pytgcalls import PyTgCalls
 from pytgcalls.exceptions import NoActiveGroupCall
@@ -20,7 +16,6 @@ from pytgcalls.types import AudioQuality, ChatUpdate, MediaStream, StreamEnded, 
 
 import config
 from strings import get_string
-from SHUKLAMUSIC.utils.logger import autoplay_log
 from SHUKLAMUSIC import LOGGER, YouTube, app
 from SHUKLAMUSIC.misc import db
 from SHUKLAMUSIC.utils.database import (
@@ -29,7 +24,6 @@ from SHUKLAMUSIC.utils.database import (
     get_autoplay,
     get_lang,
     get_loop,
-    get_vcnotify,
     group_assistant,
     is_autoend,
     music_on,
@@ -50,12 +44,6 @@ from SHUKLAMUSIC.utils.errors import capture_internal_err, send_large_error
 
 autoend = {}
 counter = {}
-vc_join_monitors = {}
-vc_join_snapshots = {}
-vc_join_targets = {}
-vc_join_call_map = {}
-vc_join_event_cache = {}
-vc_join_notice_cache = {}
 
 def dynamic_media_stream(path: str, video: bool = False, ffmpeg_params: str = None) -> MediaStream:
     if not path:
@@ -85,14 +73,6 @@ async def _clear_(chat_id: int) -> None:
                 pass
                 
     db[chat_id] = []
-    for call_id, info in list(vc_join_call_map.items()):
-        if info.get("chat_id") == chat_id:
-            vc_join_call_map.pop(call_id, None)
-    task = vc_join_monitors.pop(chat_id, None)
-    if task and not task.done():
-        task.cancel()
-    vc_join_snapshots.pop(chat_id, None)
-    vc_join_targets.pop(chat_id, None)
     await remove_active_video_chat(chat_id)
     await remove_active_chat(chat_id)
     await set_loop(chat_id, 0)
@@ -133,232 +113,7 @@ class Call:
             lock = asyncio.Lock()
             self._stream_locks[chat_id] = lock
         return lock
-
-    async def _resolve_vc_call_id(self, chat_id: int) -> int | None:
-        try:
-            chat = await app.get_chat(chat_id)
-        except Exception:
-            return None
-
-        try:
-            if chat.type in {ChatType.SUPERGROUP, ChatType.CHANNEL, ChatType.FORUM}:
-                full = await app.invoke(
-                    GetFullChannel(channel=await app.resolve_peer(chat_id))
-                )
-            else:
-                full = await app.invoke(GetFullChat(chat_id=abs(int(chat_id))))
-        except Exception:
-            return None
-
-        call = getattr(getattr(full, "full_chat", None), "call", None)
-        if not call:
-            return None
-        return int(call.id)
-
-    @staticmethod
-    def _extract_user_id_from_peer(peer) -> int | None:
-        if isinstance(peer, PeerUser):
-            return int(peer.user_id)
-        return None
-
-    @staticmethod
-    def _remember_join_event(call_id: int, user_id: int, date: int, source: int) -> bool:
-        now = time.monotonic()
-        for key, stamp in list(vc_join_event_cache.items()):
-            if now - stamp > 30:
-                vc_join_event_cache.pop(key, None)
-
-        event_key = (call_id, user_id, date, source, "join")
-        if event_key in vc_join_event_cache:
-            return False
-
-        vc_join_event_cache[event_key] = now 
-        return True
-        
-    @staticmethod
-    def _remember_join_notice(
-        notify_chat_id: int,
-        user_id: int,
-        date: int,
-        source: int,
-    ) -> bool:
-        now = time.monotonic()
-        for key, stamp in list(vc_join_notice_cache.items()):
-            if now - stamp > 60:
-                vc_join_notice_cache.pop(key, None)
-
-        notice_key = (notify_chat_id, user_id, date, source)
-        if notice_key in vc_join_notice_cache:
-            return False
-
-        vc_join_notice_cache[notice_key] = now
-        return True
-
-    async def _fetch_vc_participant_ids(self, chat_id: int) -> set[int]:
-        assistant = await group_assistant(self, chat_id)
-        participants = await assistant.get_participants(chat_id)
-        user_ids = set()
-        for participant in participants:
-            user_id = getattr(participant, "user_id", None)
-            if not user_id:
-                continue
-            user_ids.add(int(user_id))
-        return user_ids
-
-    async def _send_vc_join_notice(
-        self,
-        notify_chat_id: int,
-        user_id: int,
-        date: int = 0,
-        source: int = 0,
-    ) -> None:
-        if not self._remember_join_notice(notify_chat_id, user_id, date, source):
-            return
-
-        try:
-            user = await app.get_users(user_id)
-            name = " ".join(
-                part for part in [user.first_name, user.last_name] if part
-            ).strip() or user.username or "Unknown User"
-            username = f" (@{user.username})" if user.username else ""
-        except Exception:
-            name = "Unknown User"
-            username = ""
-
-        await app.send_message(
-            notify_chat_id,
-            f"Joined VC\nName: {name}{username}\nUser ID: <code>{user_id}</code>",
-        )
-
-    async def _handle_group_call_participants_update(
-        self,
-        update: UpdateGroupCallParticipants,
-    ) -> None:
-        call_id = int(update.call.id)
-        mapping = vc_join_call_map.get(call_id)
-        if not mapping:
-            return
-
-        notify_chat_id = mapping["notify_chat_id"]
-        if not await get_vcnotify(notify_chat_id):
-            return
-
-        member_snapshot = vc_join_snapshots.setdefault(mapping["chat_id"], set())
-
-        for participant in update.participants:
-            user_id = self._extract_user_id_from_peer(getattr(participant, "peer", None))
-            if not user_id:
-                continue
-
-            if getattr(participant, "left", False):
-                member_snapshot.discard(user_id)
-                continue
-
-            if not getattr(participant, "just_joined", False):
-                continue
-
-            if user_id in member_snapshot:
-                continue
-
-            if not self._remember_join_event(
-                call_id,
-                user_id,
-                int(getattr(participant, "date", 0) or 0),
-                int(getattr(participant, "source", 0) or 0),
-            ):
-                continue
-
-            member_snapshot.add(user_id)
-            await self._send_vc_join_notice(
-                notify_chat_id,
-                user_id,
-                int(getattr(participant, "date", 0) or 0),
-                int(getattr(participant, "source", 0) or 0),
-            )
-
-    async def _vc_join_monitor_loop(
-        self,
-        chat_id: int,
-        notify_chat_id: int,
-    ) -> None:
-        try:
-            while True:
-                if not await get_vcnotify(notify_chat_id):
-                    vc_join_snapshots.pop(chat_id, None)
-                    await asyncio.sleep(1)
-                    continue
-
-                try:
-                    current_ids = await self._fetch_vc_participant_ids(chat_id)
-                except Exception:
-                    await asyncio.sleep(1)
-                    continue
-
-                previous_ids = vc_join_snapshots.get(chat_id)
-                if previous_ids is None:
-                    vc_join_snapshots[chat_id] = current_ids
-                    await asyncio.sleep(1)
-                    continue
-
-                joined_ids = current_ids - previous_ids
-                for user_id in joined_ids:
-                    try:
-                        await self._send_vc_join_notice(
-                            notify_chat_id,
-                            user_id,
-                        )
-                    except Exception:
-                        continue
-
-                vc_join_snapshots[chat_id] = current_ids
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            raise
-        finally:
-            task = vc_join_monitors.get(chat_id)
-            if task and task is asyncio.current_task():
-                vc_join_monitors.pop(chat_id, None)
-
-    async def maybe_start_vc_join_notifier(
-        self,
-        chat_id: int,
-        notify_chat_id: int,
-    ) -> bool:
-        if not await get_vcnotify(notify_chat_id):
-            return False
-
-        call_id = await self._resolve_vc_call_id(chat_id)
-        vc_join_targets[chat_id] = notify_chat_id
-        if call_id:
-            vc_join_call_map[call_id] = {
-                "chat_id": chat_id,
-                "notify_chat_id": notify_chat_id,
-            }
-
-        if chat_id not in vc_join_snapshots:
-            try:
-                vc_join_snapshots[chat_id] = await self._fetch_vc_participant_ids(chat_id)
-            except Exception:
-                vc_join_snapshots[chat_id] = set()
-
-        existing = vc_join_monitors.get(chat_id)
-        if not existing or existing.done():
-            vc_join_monitors[chat_id] = asyncio.create_task(
-                self._vc_join_monitor_loop(chat_id, notify_chat_id)
-            )
-        return True
-
-    async def stop_vc_join_notifier(self, chat_id: int) -> None:
-        task = vc_join_monitors.pop(chat_id, None)
-        if task and not task.done():
-            task.cancel()
-        vc_join_snapshots.pop(chat_id, None)
-        vc_join_targets.pop(chat_id, None)
-        for call_id, info in list(vc_join_call_map.items()):
-            if info.get("chat_id") == chat_id:
-                vc_join_call_map.pop(call_id, None)
-
-    async def _play_stream(self, assistant: PyTgCalls, chat_id: int, stream: MediaStream) -> None:
+            async def _play_stream(self, assistant: PyTgCalls, chat_id: int, stream: MediaStream) -> None:
         async with self._get_stream_lock(chat_id):
             for attempt in range(2):
                 try:
@@ -396,7 +151,6 @@ class Call:
     @capture_internal_err
     async def stop_stream(self, chat_id: int) -> None:
         assistant = await group_assistant(self, chat_id)
-        await self.stop_vc_join_notifier(chat_id)
         await _clear_(chat_id)
         if chat_id not in self.active_calls:
             return
@@ -410,7 +164,6 @@ class Call:
     @capture_internal_err
     async def force_stop_stream(self, chat_id: int) -> None:
         assistant = await group_assistant(self, chat_id)
-        await self.stop_vc_join_notifier(chat_id)
         try:
             check = db.get(chat_id)
             if check:
@@ -552,14 +305,12 @@ class Call:
         await music_on(chat_id)
         if video:
             await add_active_video_chat(chat_id)
-        await self.maybe_start_vc_join_notifier(chat_id, original_chat_id)
 
         if await is_autoend():
             counter[chat_id] = {}
             users = len(await assistant.get_participants(chat_id))
             if users == 1:
                 autoend[chat_id] = datetime.now() + timedelta(minutes=1)
-
     async def _log_autoplay(self, chat_id: int, prev_title: str, next_title: str):
         if not config.LOGGER_ID:
             return
@@ -794,8 +545,7 @@ class Call:
             LOGGER(__name__).error(f"Ultimate fallback also failed: {e}")
 
         return False
-
-    @capture_internal_err
+                @capture_internal_err
     async def play(self, client, chat_id: int) -> None:
         check = db.get(chat_id)
         popped = None
@@ -889,16 +639,12 @@ class Call:
                 except Exception as download_err:
                     LOGGER(__name__).error(f"YouTube extraction failed: {download_err}")
 
-                # 🟢 SOURCE-HOPPING LAYER (YouTube fail hone par backup targets toggle honge)
                 if not file_path:
                     await mystic.edit_text(
                         "⚠️ **YouTube block/limit hit.**\n🔄 *Switching to alternative nodes (SoundCloud/Spotify/Saavn)...*",
                         disable_web_page_preview=True
                     )
                     
-                    # NOTE: Yahan source-hopping parser execute hoga jo track metadata match karega
-                    # file_path = await self.fetch_alternative_stream(title) 
-
                     if not file_path:
                         return await mystic.edit_text("❌ Sabhi streaming platforms par extraction fail ho gayi. Agla track play karein.")
 
@@ -1027,13 +773,7 @@ class Call:
     @capture_internal_err
     async def decorators(self) -> None:
         assistants = list(filter(None, [self.one, self.two, self.three, self.four, self.five]))
-        raw_clients = list(
-            filter(
-                None,
-                [app, self.userbot1, self.userbot2, self.userbot3, self.userbot4, self.userbot5],
-            )
-        )
-
+        
         CRITICAL = (
             ChatUpdate.Status.KICKED
             | ChatUpdate.Status.LEFT_GROUP
@@ -1067,25 +807,8 @@ class Call:
                 filename = f"update_error_{getattr(update, 'chat_id', 'unknown')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 await send_large_error(full_trace, caption, filename)
 
-        async def raw_group_call_handler(client, update, users, chats) -> None:
-            try:
-                if isinstance(update, UpdateGroupCallParticipants):
-                    await self._handle_group_call_participants_update(update)
-            except Exception:
-                import sys, traceback
-                exc_type, exc_obj, exc_tb = sys.exc_info()
-                full_trace = "".join(traceback.format_exception(exc_type, exc_obj, exc_tb))
-                caption = (
-                    f"VC Notify Error\n"
-                    f"Update Type: {type(update).__name__}\n"
-                    f"Error Type: {exc_type.__name__}"
-                )
-                filename = f"vc_notify_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                await send_large_error(full_trace, caption, filename)
-
         for assistant in assistants:
             assistant.on_update()(unified_update_handler)
-        for raw_client in raw_clients:
-            raw_client.add_handler(RawUpdateHandler(raw_group_call_handler), group=99)
 
 SHUKLA = Call()
+                    
