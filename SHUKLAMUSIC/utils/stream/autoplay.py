@@ -25,32 +25,54 @@ class AdvancedAutoplay:
         self.locks: Dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self.providers = ["shruti", "inflex", "youtube_native"]
 
+        # Vibe & Artist DB for Exact Spotify-Style Matching
+        self.moods = ["sad", "love", "romantic", "lofi", "chill", "party", "mashup", "emotional", "heartbreak", "dance", "dj", "slowed", "reverb", "bhakti"]
+        self.artists = [
+            "arijit singh", "shreya ghoshal", "atif aslam", "neha kakkar", "jubin nautiyal",
+            "darshan raval", "armaan malik", "sonu nigam", "badshah", "sunidhi chauhan",
+            "udit narayan", "kumar sanu", "alka yagnik", "sachet tandon", "b praak",
+            "vishal mishra", "kk", "mohit chauhan", "ar rahman", "pritam",
+            "kishore kumar", "lata mangeshkar", "mika singh", "yo yo honey singh", "guru randhawa",
+            "sidhu moose wala", "karan aujla", "diljit dosanjh", "ap dhillon", "hardy sandhu",
+            "pawan singh", "khesari lal yadav", "shilpi raj", "sapna choudhary",
+            "anirudh", "yuvan shankar raja", "sid sriram", "devi sri prasad",
+            "taylor swift", "justin bieber", "ed sheeran", "the weeknd", "drake", "bts"
+        ]
+
     async def _fetch_from_youtube_native(self, vidid: str) -> List[dict]:
-        """Ultimate fallback: Smartly searches for artist's other songs, blocking remixes."""
+        """Smart Vibe Engine: Maintains exact mood and artist without repeating."""
         try:
             current_search = VideosSearch(f"https://youtube.com/watch?v={vidid}", limit=1)
             current_result = await current_search.next()
             if not current_result or not current_result.get("result"):
                 return []
                 
-            track_info = current_result["result"][0]
-            title = track_info.get("title", "")
+            raw_title = current_result["result"][0].get("title", "")
+            title = raw_title.lower()
             
-            # Extract channel/artist name to find DIFFERENT songs by the same creator
-            channel_name = track_info.get("channel", {}).get("name", "").replace(" - Topic", "").replace("VEVO", "").strip()
-            
-            # Clean title to use as an Anti-Remix filter
-            clean_title = title.split("|")[0].split("(")[0].split("-")[0].split("[")[0].strip().lower()
-            
-            if channel_name:
-                search_query = random.choice([
-                    f"{channel_name} hit songs",
-                    f"{channel_name} popular audio tracks",
-                    f"best songs by {channel_name}"
-                ])
+            # 1. Detect Vibe & Artist
+            detected_mood = random.choice(["hit", "popular", "best", "trending"])
+            for m in self.moods:
+                if m in title:
+                    detected_mood = m
+                    break
+                    
+            detected_artist = ""
+            for a in self.artists:
+                if a in title:
+                    detected_artist = a
+                    break
+
+            clean_title = raw_title.split("|")[0].split("(")[0].split("-")[0].split("[")[0].strip().lower()
+
+            # 2. Build Query (T-Series wale kachre ki jagah exact vibe search hogi)
+            if detected_artist:
+                search_query = f"{detected_artist} {detected_mood} audio songs"
             else:
-                search_query = f"top hit audio songs hindi"
-            
+                short_title = " ".join(clean_title.split()[:2])
+                search_query = f"{short_title} {detected_mood} similar audio tracks"
+
+            # 3. Fetch Tracks
             results = VideosSearch(search_query, limit=20)
             res = await results.next()
             
@@ -59,9 +81,13 @@ class AdvancedAutoplay:
                 for track in res["result"]:
                     new_title = track.get("title", "").lower()
                     
-                    # 🔥 THE FIX: Anti-Remix Filter. Agar purane gaane ka naam naye gaane mein hai, toh Reject maro!
-                    if clean_title and clean_title in new_title:
-                        continue 
+                    # ANTI-REMIX: Agar purane gaane ka naam naye me hai (jaise Lofi, Slowed), toh skip karo
+                    if len(clean_title) > 3 and clean_title in new_title:
+                        continue
+                        
+                    # ANTI-TRASH: Faltu videos block karo
+                    if any(w in new_title for w in ["news", "vlog", "interview", "podcast", "trailer", "teaser", "movie", "review", "reaction", "scene"]):
+                        continue
                         
                     dur_str = track.get("duration")
                     if dur_str:
@@ -94,10 +120,8 @@ class AdvancedAutoplay:
                         data = await response.json()
                         if isinstance(data, list): return data
                         elif isinstance(data, dict): return data.get("results") or data.get("data") or data.get("items") or []
-                    else:
-                        logger.warning(f"⚠️ {provider.capitalize()} API Down. Status: {response.status}")
-        except Exception as e:
-            logger.warning(f"⚠️ {provider.capitalize()} API Error: {e}")
+        except Exception:
+            pass
             
         return []
 
@@ -138,6 +162,20 @@ class AdvancedAutoplay:
                         if await self._validate_track(track):
                             logger.info(f"✅ Track verified via {provider.capitalize()}")
                             return track
+                            
+        # 🔥 THE ULTIMATE LAST RESORT: Agar sab fail ho jaye, toh randomly trending bja do par VC mat chhodo!
+        try:
+            fallback_search = VideosSearch("latest trending hit audio songs", limit=10)
+            res = await fallback_search.next()
+            if res and res.get("result"):
+                for track in res["result"]:
+                    vidid = track.get("id")
+                    if vidid and vidid not in self.history[chat_id]:
+                        track["vidid"] = vidid
+                        if await self._validate_track(track):
+                            return track
+        except:
+            pass
                             
         return None
 
