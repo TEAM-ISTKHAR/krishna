@@ -1,30 +1,20 @@
-import asyncio
-import logging
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, Message
 
 import config
 from SHUKLAMUSIC import YouTube, app
-from SHUKLAMUSIC.core.call import SHUKLA
+from SHUKLAMUSIC.core.call import JARVIS
 from SHUKLAMUSIC.misc import db
-from SHUKLAMUSIC.utils.database import get_loop, get_autoplay
+from SHUKLAMUSIC.utils.database import get_loop
 from SHUKLAMUSIC.utils.decorators import AdminRightsCheck
-from SHUKLAMUSIC.utils.inline import close_markup, stream_markup, stream_markup_timer
+from SHUKLAMUSIC.utils.inline import close_markup, stream_markup
 from SHUKLAMUSIC.utils.stream.autoclear import auto_clean
-from SHUKLAMUSIC.utils.thumbnails import get_thumb
+from SHUKLAMUSIC.utils.stream.cards import schedule_stream_card
 from config import BANNED_USERS
 
-LOGGER = logging.getLogger(__name__)
-
-async def _delete_msg(message, delay: int = 6):
-    try:
-        await asyncio.sleep(delay)
-        await message.delete()
-    except Exception:
-        pass
 
 @app.on_message(
-    filters.command(["skip", "cskip", "next", "cnext"]) & filters.group & ~BANNED_USERS
+    filters.command(["skip", "cskip", "next", "cnext"], prefixes=["/", "!"]) & filters.group & ~BANNED_USERS
 )
 @AdminRightsCheck
 async def skip(cli, message: Message, _, chat_id):
@@ -50,69 +40,11 @@ async def skip(cli, message: Message, _, chat_id):
                             if popped:
                                 await auto_clean(popped)
                             if not check:
-                                # --- 🚀 ALONE-X SMART AUTOPLAY SKIP LOGIC ---
-                                try:
-                                    is_autoplay = await get_autoplay(chat_id)
-                                except:
-                                    is_autoplay = False
-
-                                if is_autoplay and popped and popped.get("vidid") not in ["telegram", "soundcloud", None]:
-                                    try:
-                                        vidid = popped["vidid"]
-                                        related = None
-                                        
-                                        # Smart Channel Search (AloneX logic)
-                                        from youtubesearchpython.__future__ import Video, VideosSearch
-                                        try:
-                                            video_info = await Video.get(vidid)
-                                            if video_info and "channel" in video_info:
-                                                channel_name = video_info["channel"].get("name", "")
-                                                search_query = f"{channel_name} songs"
-                                                results = VideosSearch(search_query, limit=7)
-                                                res = await results.next()
-                                                if res and res.get("result"):
-                                                    for track in res["result"]:
-                                                        if track.get("id") != vidid and track.get("duration"):
-                                                            dur = track.get("duration", "0:00")
-                                                            parts = dur.split(":")
-                                                            duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                                                            related = {
-                                                                "vidid": track.get("id"),
-                                                                "title": track.get("title", "Unknown Title"),
-                                                                "duration": dur,
-                                                                "duration_sec": duration_sec
-                                                            }
-                                                            break
-                                        except Exception:
-                                            pass
-                                            
-                                        # Fallback to default YouTube API
-                                        if not related:
-                                            history = SHUKLA.history.get(chat_id, []) if hasattr(SHUKLA, 'history') else []
-                                            related = await YouTube.get_related(vidid, history)
-                                            
-                                        if related:
-                                            db[chat_id].append({
-                                                "vidid": related["vidid"],
-                                                "file": f"vid_{related['vidid']}",
-                                                "title": related["title"],
-                                                "by": "ʀєǫυєsᴛєʀ : Spotify Radio 🟢",
-                                                "chat_id": chat_id,
-                                                "streamtype": "audio",
-                                                "dur": related.get("duration", "Unknown"),
-                                                "seconds": related.get("duration_sec", 0),
-                                            })
-                                            short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
-                                            notice = await app.send_message(
-                                                chat_id, 
-                                                f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Nᴇxᴛ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
-                                                disable_web_page_preview=True
-                                            )
-                                            asyncio.create_task(_delete_msg(notice, 6))
-                                    except Exception as e:
-                                        LOGGER.error(f"Autoplay Skip Error: {e}")
-                                # ---------------------------
-                                if not check:
+                                # 🔥 AUTOPLAY INJECTION (MULTI-SKIP)
+                                if await JARVIS._enqueue_autoplay_track(chat_id, popped):
+                                    check = db.get(chat_id)
+                                    break
+                                else:
                                     try:
                                         await message.reply_text(
                                             text=_["admin_6"].format(
@@ -121,10 +53,10 @@ async def skip(cli, message: Message, _, chat_id):
                                             ),
                                             reply_markup=close_markup(_),
                                         )
-                                        await SHUKLA.stop_stream(chat_id)
+                                        await JARVIS.stop_stream(chat_id)
                                     except:
-                                        pass
-                                    return
+                                        return
+                                    break
                     else:
                         return await message.reply_text(_["admin_11"].format(count))
                 else:
@@ -141,68 +73,10 @@ async def skip(cli, message: Message, _, chat_id):
             if popped:
                 await auto_clean(popped)
             if not check:
-                # --- 🚀 ALONE-X SMART AUTOPLAY SKIP LOGIC ---
-                try:
-                    is_autoplay = await get_autoplay(chat_id)
-                except:
-                    is_autoplay = False
-
-                if is_autoplay and popped and popped.get("vidid") not in ["telegram", "soundcloud", None]:
-                    try:
-                        vidid = popped["vidid"]
-                        related = None
-                        
-                        from youtubesearchpython.__future__ import Video, VideosSearch
-                        try:
-                            video_info = await Video.get(vidid)
-                            if video_info and "channel" in video_info:
-                                channel_name = video_info["channel"].get("name", "")
-                                search_query = f"{channel_name} songs"
-                                results = VideosSearch(search_query, limit=7)
-                                res = await results.next()
-                                if res and res.get("result"):
-                                    for track in res["result"]:
-                                        if track.get("id") != vidid and track.get("duration"):
-                                            dur = track.get("duration", "0:00")
-                                            parts = dur.split(":")
-                                            duration_sec = sum(int(x) * 60 ** i for i, x in enumerate(reversed(parts)))
-                                            related = {
-                                                "vidid": track.get("id"),
-                                                "title": track.get("title", "Unknown Title"),
-                                                "duration": dur,
-                                                "duration_sec": duration_sec
-                                            }
-                                            break
-                        except Exception:
-                            pass
-                            
-                        if not related:
-                            history = SHUKLA.history.get(chat_id, []) if hasattr(SHUKLA, 'history') else []
-                            related = await YouTube.get_related(vidid, history)
-                            
-                        if related:
-                            db[chat_id].append({
-                                "vidid": related["vidid"],
-                                "file": f"vid_{related['vidid']}",
-                                "title": related["title"],
-                                "by": "AUTOPLAY",
-                                "chat_id": chat_id,
-                                "streamtype": "audio",
-                                "dur": related.get("duration", "Unknown"),
-                                "seconds": related.get("duration_sec", 0),
-                            })
-                            short_title = related["title"][:45] + "..." if len(related["title"]) > 45 else related["title"]
-                            notice = await app.send_message(
-                                chat_id, 
-                                f"<blockquote>▶️ <b>Aᴜᴛᴏᴘʟᴀʏ Sᴋɪᴘ :</b>\n🎧 <a href='https://youtube.com/watch?v={related['vidid']}'><i>{short_title}</i></a></blockquote>", 
-                                disable_web_page_preview=True
-                            )
-                            asyncio.create_task(_delete_msg(notice, 6))
-                    except Exception as e:
-                        LOGGER.error(f"Autoplay Skip Error: {e}")
-                # ---------------------------
-
-                if not check:
+                # 🔥 AUTOPLAY INJECTION (SINGLE SKIP)
+                if await JARVIS._enqueue_autoplay_track(chat_id, popped):
+                    check = db.get(chat_id)
+                else:
                     await message.reply_text(
                         text=_["admin_6"].format(
                             message.from_user.mention, message.chat.title
@@ -210,7 +84,7 @@ async def skip(cli, message: Message, _, chat_id):
                         reply_markup=close_markup(_),
                     )
                     try:
-                        return await SHUKLA.stop_stream(chat_id)
+                        return await JARVIS.stop_stream(chat_id)
                     except:
                         return
         except:
@@ -221,35 +95,27 @@ async def skip(cli, message: Message, _, chat_id):
                     ),
                     reply_markup=close_markup(_),
                 )
-                return await SHUKLA.stop_stream(chat_id)
+                return await JARVIS.stop_stream(chat_id)
             except:
                 return
 
-    check = db.get(chat_id)
-    if not check:
-        return
-
+    # Uske baad automatically check[0] wala play ho jayega (yaani tumhara naya Autoplay gaana)
     queued = check[0]["file"]
     title = (check[0]["title"]).title()
     user = check[0]["by"]
+    requester_id = check[0].get("user_id")
     streamtype = check[0]["streamtype"]
     videoid = check[0]["vidid"]
     status = True if str(streamtype) == "video" else None
     db[chat_id][0]["played"] = 0
     exis = (check[0]).get("old_dur")
-
+    
     if exis:
         db[chat_id][0]["dur"] = exis
         db[chat_id][0]["seconds"] = check[0]["old_second"]
         db[chat_id][0]["speed_path"] = None
         db[chat_id][0]["speed"] = 1.0
-
-    dur = check[0].get("dur", "0:00")
-    if dur == "Unknown" or dur == "0:00":
-        dynamic_button = stream_markup(_, chat_id)
-    else:
-        dynamic_button = stream_markup_timer(_, chat_id, "00:00", dur)
-
+        
     if "live_" in queued:
         n, link = await YouTube.video(videoid, True)
         if n == 0:
@@ -259,26 +125,24 @@ async def skip(cli, message: Message, _, chat_id):
         except:
             image = None
         try:
-            await SHUKLA.skip_stream(chat_id, link, video=status, image=image)
+            await JARVIS.skip_stream(chat_id, link, video=status, image=image)
         except:
             return await message.reply_text(_["call_6"])
-
         button = stream_markup(_, chat_id)
-        img = await get_thumb(videoid)
-        run = await message.reply_photo(
-            photo=img,
+        schedule_stream_card(
+            chat_id=chat_id,
+            original_chat_id=message.chat.id,
+            videoid=videoid,
+            user_id=requester_id,
             caption=_["stream_1"].format(
                 f"https://t.me/{app.username}?start=info_{videoid}",
                 title[:23],
                 check[0]["dur"],
                 user,
             ),
-            reply_markup=InlineKeyboardMarkup(button),
+            button=button,
+            markup="tg",
         )
-        if db.get(chat_id):
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "tg"
-
     elif "vid_" in queued:
         mystic = await message.reply_text(_["call_7"], disable_web_page_preview=True)
         try:
@@ -295,41 +159,38 @@ async def skip(cli, message: Message, _, chat_id):
         except:
             image = None
         try:
-            await SHUKLA.skip_stream(chat_id, file_path, video=status, image=image)
+            await JARVIS.skip_stream(chat_id, file_path, video=status, image=image)
         except:
             return await mystic.edit_text(_["call_6"])
-
-        img = await get_thumb(videoid)
-        run = await message.reply_photo(
-            photo=img,
+        button = stream_markup(_, chat_id)
+        schedule_stream_card(
+            chat_id=chat_id,
+            original_chat_id=message.chat.id,
+            videoid=videoid,
+            user_id=requester_id,
             caption=_["stream_1"].format(
                 f"https://t.me/{app.username}?start=info_{videoid}",
                 title[:23],
                 check[0]["dur"],
                 user,
             ),
-            reply_markup=InlineKeyboardMarkup(dynamic_button),
+            button=button,
+            markup="stream",
         )
-        if db.get(chat_id):
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "stream"
         await mystic.delete()
-
     elif "index_" in queued:
         try:
-            await SHUKLA.skip_stream(chat_id, videoid, video=status)
+            await JARVIS.skip_stream(chat_id, videoid, video=status)
         except:
             return await message.reply_text(_["call_6"])
-
+        button = stream_markup(_, chat_id)
         run = await message.reply_photo(
             photo=config.STREAM_IMG_URL,
             caption=_["stream_2"].format(user),
-            reply_markup=InlineKeyboardMarkup(dynamic_button),
+            reply_markup=InlineKeyboardMarkup(button),
         )
-        if db.get(chat_id):
-            db[chat_id][0]["mystic"] = run
-            db[chat_id][0]["markup"] = "tg"
-
+        db[chat_id][0]["mystic"] = run
+        db[chat_id][0]["markup"] = "tg"
     else:
         if videoid == "telegram":
             image = None
@@ -341,11 +202,12 @@ async def skip(cli, message: Message, _, chat_id):
             except:
                 image = None
         try:
-            await SHUKLA.skip_stream(chat_id, queued, video=status, image=image)
+            await JARVIS.skip_stream(chat_id, queued, video=status, image=image)
         except:
             return await message.reply_text(_["call_6"])
-
+            
         if videoid == "telegram":
+            button = stream_markup(_, chat_id)
             run = await message.reply_photo(
                 photo=config.TELEGRAM_AUDIO_URL
                 if str(streamtype) == "audio"
@@ -353,12 +215,12 @@ async def skip(cli, message: Message, _, chat_id):
                 caption=_["stream_1"].format(
                     config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
                 ),
-                reply_markup=InlineKeyboardMarkup(dynamic_button),
+                reply_markup=InlineKeyboardMarkup(button),
             )
-            if db.get(chat_id):
-                db[chat_id][0]["mystic"] = run
-                db[chat_id][0]["markup"] = "tg"
+            db[chat_id][0]["mystic"] = run
+            db[chat_id][0]["markup"] = "tg"
         elif videoid == "soundcloud":
+            button = stream_markup(_, chat_id)
             run = await message.reply_photo(
                 photo=config.SOUNCLOUD_IMG_URL
                 if str(streamtype) == "audio"
@@ -366,23 +228,23 @@ async def skip(cli, message: Message, _, chat_id):
                 caption=_["stream_1"].format(
                     config.SUPPORT_CHAT, title[:23], check[0]["dur"], user
                 ),
-                reply_markup=InlineKeyboardMarkup(dynamic_button),
+                reply_markup=InlineKeyboardMarkup(button),
             )
-            if db.get(chat_id):
-                db[chat_id][0]["mystic"] = run
-                db[chat_id][0]["markup"] = "tg"
+            db[chat_id][0]["mystic"] = run
+            db[chat_id][0]["markup"] = "tg"
         else:
-            img = await get_thumb(videoid)
-            run = await message.reply_photo(
-                photo=img,
+            button = stream_markup(_, chat_id)
+            schedule_stream_card(
+                chat_id=chat_id,
+                original_chat_id=message.chat.id,
+                videoid=videoid,
+                user_id=requester_id,
                 caption=_["stream_1"].format(
                     f"https://t.me/{app.username}?start=info_{videoid}",
                     title[:23],
                     check[0]["dur"],
                     user,
                 ),
-                reply_markup=InlineKeyboardMarkup(dynamic_button),
+                button=button,
+                markup="stream",
             )
-            if db.get(chat_id):
-                db[chat_id][0]["mystic"] = run
-                db[chat_id][0]["markup"] = "stream"
