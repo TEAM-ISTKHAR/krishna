@@ -3,7 +3,7 @@ from pyrogram.types import InlineKeyboardMarkup, Message
 
 import config
 from SHUKLAMUSIC import YouTube, app
-from SHUKLAMUSIC.core.call import JARVIS
+from SHUKLAMUSIC.core.call import SUKHLA
 from SHUKLAMUSIC.misc import db
 from SHUKLAMUSIC.utils.database import get_loop
 from SHUKLAMUSIC.utils.decorators import AdminRightsCheck
