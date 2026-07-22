@@ -6,18 +6,15 @@ import httpx
 from collections import defaultdict, deque
 from typing import Optional, Dict, List
 
-# 🔥 ULTRA-FIX: HTTPX PROXY CRASH PATCH 🔥
-# Ye chota sa bypass Heroku ke "unexpected keyword argument 'proxies'" error ko hamesha ke liye rok dega.
+# 🔥 ULTRA-FIX: HTTPX PROXY CRASH PATCH
 _orig_init = httpx.AsyncClient.__init__
 def _patched_init(self, *args, **kwargs):
-    kwargs.pop('proxies', None) # Proxies ko hatakar crash prevent karta hai
+    kwargs.pop('proxies', None)
     _orig_init(self, *args, **kwargs)
 httpx.AsyncClient.__init__ = _patched_init
 
-# Patch apply hone ke baad import karna zaroori hai
 from youtubesearchpython.__future__ import VideosSearch
 
-# Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("AutoplayManager")
 
@@ -29,23 +26,43 @@ class AdvancedAutoplay:
         self.providers = ["shruti", "inflex", "youtube_native"]
 
     async def _fetch_from_youtube_native(self, vidid: str) -> List[dict]:
-        """Ultimate fallback: Directly scrapes YouTube bina API crash hue"""
+        """Ultimate fallback: Smartly searches for artist's other songs, blocking remixes."""
         try:
             current_search = VideosSearch(f"https://youtube.com/watch?v={vidid}", limit=1)
             current_result = await current_search.next()
             if not current_result or not current_result.get("result"):
                 return []
                 
-            title = current_result["result"][0]["title"]
-            clean_title = title.split("|")[0].split("(")[0].strip()
-            search_query = f"{clean_title} audio song"
+            track_info = current_result["result"][0]
+            title = track_info.get("title", "")
             
-            results = VideosSearch(search_query, limit=15)
+            # Extract channel/artist name to find DIFFERENT songs by the same creator
+            channel_name = track_info.get("channel", {}).get("name", "").replace(" - Topic", "").replace("VEVO", "").strip()
+            
+            # Clean title to use as an Anti-Remix filter
+            clean_title = title.split("|")[0].split("(")[0].split("-")[0].split("[")[0].strip().lower()
+            
+            if channel_name:
+                search_query = random.choice([
+                    f"{channel_name} hit songs",
+                    f"{channel_name} popular audio tracks",
+                    f"best songs by {channel_name}"
+                ])
+            else:
+                search_query = f"top hit audio songs hindi"
+            
+            results = VideosSearch(search_query, limit=20)
             res = await results.next()
             
             tracks = []
             if res and res.get("result"):
                 for track in res["result"]:
+                    new_title = track.get("title", "").lower()
+                    
+                    # 🔥 THE FIX: Anti-Remix Filter. Agar purane gaane ka naam naye gaane mein hai, toh Reject maro!
+                    if clean_title and clean_title in new_title:
+                        continue 
+                        
                     dur_str = track.get("duration")
                     if dur_str:
                         tracks.append({
