@@ -2,8 +2,19 @@ import asyncio
 import random
 import logging
 import aiohttp
+import httpx
 from collections import defaultdict, deque
 from typing import Optional, Dict, List
+
+# 🔥 ULTRA-FIX: HTTPX PROXY CRASH PATCH 🔥
+# Ye chota sa bypass Heroku ke "unexpected keyword argument 'proxies'" error ko hamesha ke liye rok dega.
+_orig_init = httpx.AsyncClient.__init__
+def _patched_init(self, *args, **kwargs):
+    kwargs.pop('proxies', None) # Proxies ko hatakar crash prevent karta hai
+    _orig_init(self, *args, **kwargs)
+httpx.AsyncClient.__init__ = _patched_init
+
+# Patch apply hone ke baad import karna zaroori hai
 from youtubesearchpython.__future__ import VideosSearch
 
 # Logging setup
@@ -15,11 +26,10 @@ class AdvancedAutoplay:
         self.stream_client = stream_client
         self.history: Dict[int, deque] = defaultdict(lambda: deque(maxlen=100))
         self.locks: Dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
-        # Added native YouTube as the ultimate fallback
         self.providers = ["shruti", "inflex", "youtube_native"]
 
     async def _fetch_from_youtube_native(self, vidid: str) -> List[dict]:
-        """Ultimate fallback: Directly scrapes YouTube without any API Keys"""
+        """Ultimate fallback: Directly scrapes YouTube bina API crash hue"""
         try:
             current_search = VideosSearch(f"https://youtube.com/watch?v={vidid}", limit=1)
             current_result = await current_search.next()
@@ -52,7 +62,6 @@ class AdvancedAutoplay:
         if provider == "youtube_native":
             return await self._fetch_from_youtube_native(vidid)
             
-        # 🔥 YAHAN NAYA URL UPDATE KIYA HAI
         api_configs = {
             "shruti": f"https://shrutibots.site/related?id={vidid}&apikey=ShrutiBotsV1npoyhq8PrrjlVADSPU",
             "inflex": f"https://teaminflex.xyz/related?id={vidid}&apikey=INFLEX99600328D"
