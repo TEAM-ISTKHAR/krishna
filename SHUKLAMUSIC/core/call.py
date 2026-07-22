@@ -20,10 +20,10 @@ from pytgcalls.types import AudioQuality, ChatUpdate, MediaStream, StreamEnded, 
 
 import config
 from strings import get_string
-from VIVAANXMUSIC.utils.logger import autoplay_log
-from VIVAANXMUSIC import LOGGER, YouTube, app
-from VIVAANXMUSIC.misc import db
-from VIVAANXMUSIC.utils.database import (
+from SHUKLAMUSIC.utils.logger import autoplay_log
+from SHUKLAMUSIC import LOGGER, YouTube, app
+from SHUKLAMUSIC.misc import db
+from SHUKLAMUSIC.utils.database import (
     add_active_chat,
     add_active_video_chat,
     get_autoplay,
@@ -37,16 +37,16 @@ from VIVAANXMUSIC.utils.database import (
     remove_active_video_chat,
     set_loop,
 )
-from VIVAANXMUSIC.utils.exceptions import AssistantErr
-from VIVAANXMUSIC.utils.formatters import check_duration, seconds_to_min, speed_converter
+from SHUKLAMUSIC.utils.exceptions import AssistantErr
+from SHUKLAMUSIC.utils.formatters import check_duration, seconds_to_min, speed_converter
 
-from VIVAANXMUSIC.utils.inline.play import stream_markup
+from SHUKLAMUSIC.utils.inline.play import stream_markup
 from VIVAANXMUSIC.utils.inline.player import player_markup
 
-from VIVAANXMUSIC.security import build_subprocess_env
-from VIVAANXMUSIC.utils.stream.autoclear import auto_clean
-from VIVAANXMUSIC.utils.stream.cards import schedule_stream_card
-from VIVAANXMUSIC.utils.errors import capture_internal_err, send_large_error
+from SHUKLAMUSIC.security import build_subprocess_env
+from SHUKLAMUSIC.utils.stream.autoclear import auto_clean
+from SHUKLAMUSIC.utils.stream.cards import schedule_stream_card
+from SHUKLAMUSIC.utils.errors import capture_internal_err, send_large_error
 
 autoend = {}
 counter = {}
@@ -1088,4 +1088,4 @@ class Call:
         for raw_client in raw_clients:
             raw_client.add_handler(RawUpdateHandler(raw_group_call_handler), group=99)
 
-JARVIS = Call()
+SHUKLA = Call()
