@@ -9,18 +9,18 @@ from pyrogram.types import Message
 from py_yt import VideosSearch, Playlist
 import aiohttp
 
-# --- DONO APIs YAHAN SET HAIN ---
-# Downloading ke liye (Tumhari di hui API)
-API_URL = os.environ.get("SHRUTI_API_URL", "https://api.shrutibots.site")
+# --- 🔥 NAYA URL YAHAN BHI UPDATE KIYA HAI ---
+API_URL = os.environ.get("SHRUTI_API_URL", "https://shrutibots.site")
 API_KEY = os.environ.get("SHRUTI_API_KEY", "ShrutiBotswUiyhdS8Fmjt8limDX69") 
 
-# Autoplay / Related Fetching ke liye (Pichli APIs)
-SHRUTI_RELATED_URL = "https://api01.shrutibots.site/related"
+SHRUTI_RELATED_URL = "https://shrutibots.site/related"
 SHRUTI_RELATED_KEY = "ShrutiBotsV1npoyhq8PrrjlVADSPU"
 INFLEX_RELATED_URL = "https://teaminflex.xyz/related"
 INFLEX_RELATED_KEY = "INFLEX99600328D"
 
 DOWNLOAD_DIR = "downloads"
+
+# ... Baaki ka neeche ka code same rahega ...
 
 
 def time_to_seconds(time):
