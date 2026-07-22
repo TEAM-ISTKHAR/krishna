@@ -9,7 +9,6 @@ from SHUKLAMUSIC.utils.database import get_loop
 from SHUKLAMUSIC.utils.decorators import AdminRightsCheck
 from SHUKLAMUSIC.utils.inline import close_markup, stream_markup
 from SHUKLAMUSIC.utils.stream.autoclear import auto_clean
-from SHUKLAMUSIC.utils.stream.cards import schedule_stream_card
 from config import BANNED_USERS
 
 
@@ -41,7 +40,7 @@ async def skip(cli, message: Message, _, chat_id):
                                 await auto_clean(popped)
                             if not check:
                                 # 🔥 AUTOPLAY INJECTION (MULTI-SKIP)
-                                if await JARVIS._enqueue_autoplay_track(chat_id, popped):
+                                if await SHUKLA._enqueue_autoplay_track(chat_id, popped):
                                     check = db.get(chat_id)
                                     break
                                 else:
@@ -53,7 +52,7 @@ async def skip(cli, message: Message, _, chat_id):
                                             ),
                                             reply_markup=close_markup(_),
                                         )
-                                        await JARVIS.stop_stream(chat_id)
+                                        await SHUKLA.stop_stream(chat_id)
                                     except:
                                         return
                                     break
@@ -74,7 +73,7 @@ async def skip(cli, message: Message, _, chat_id):
                 await auto_clean(popped)
             if not check:
                 # 🔥 AUTOPLAY INJECTION (SINGLE SKIP)
-                if await JARVIS._enqueue_autoplay_track(chat_id, popped):
+                if await SHUKLA._enqueue_autoplay_track(chat_id, popped):
                     check = db.get(chat_id)
                 else:
                     await message.reply_text(
@@ -84,7 +83,7 @@ async def skip(cli, message: Message, _, chat_id):
                         reply_markup=close_markup(_),
                     )
                     try:
-                        return await JARVIS.stop_stream(chat_id)
+                        return await SHUKLA.stop_stream(chat_id)
                     except:
                         return
         except:
@@ -95,7 +94,7 @@ async def skip(cli, message: Message, _, chat_id):
                     ),
                     reply_markup=close_markup(_),
                 )
-                return await JARVIS.stop_stream(chat_id)
+                return await SHUKLA.stop_stream(chat_id)
             except:
                 return
 
@@ -109,13 +108,13 @@ async def skip(cli, message: Message, _, chat_id):
     status = True if str(streamtype) == "video" else None
     db[chat_id][0]["played"] = 0
     exis = (check[0]).get("old_dur")
-    
+
     if exis:
         db[chat_id][0]["dur"] = exis
         db[chat_id][0]["seconds"] = check[0]["old_second"]
         db[chat_id][0]["speed_path"] = None
         db[chat_id][0]["speed"] = 1.0
-        
+
     if "live_" in queued:
         n, link = await YouTube.video(videoid, True)
         if n == 0:
@@ -125,24 +124,23 @@ async def skip(cli, message: Message, _, chat_id):
         except:
             image = None
         try:
-            await JARVIS.skip_stream(chat_id, link, video=status, image=image)
+            await SHUKLA.skip_stream(chat_id, link, video=status, image=image)
         except:
             return await message.reply_text(_["call_6"])
         button = stream_markup(_, chat_id)
-        schedule_stream_card(
-            chat_id=chat_id,
-            original_chat_id=message.chat.id,
-            videoid=videoid,
-            user_id=requester_id,
+        run = await message.reply_photo(
+            photo=image if image else config.STREAM_IMG_URL,
             caption=_["stream_1"].format(
                 f"https://t.me/{app.username}?start=info_{videoid}",
                 title[:23],
                 check[0]["dur"],
                 user,
             ),
-            button=button,
-            markup="tg",
+            reply_markup=InlineKeyboardMarkup(button),
         )
+        db[chat_id][0]["mystic"] = run
+        db[chat_id][0]["markup"] = "tg"
+
     elif "vid_" in queued:
         mystic = await message.reply_text(_["call_7"], disable_web_page_preview=True)
         try:
@@ -159,28 +157,27 @@ async def skip(cli, message: Message, _, chat_id):
         except:
             image = None
         try:
-            await JARVIS.skip_stream(chat_id, file_path, video=status, image=image)
+            await SHUKLA.skip_stream(chat_id, file_path, video=status, image=image)
         except:
             return await mystic.edit_text(_["call_6"])
         button = stream_markup(_, chat_id)
-        schedule_stream_card(
-            chat_id=chat_id,
-            original_chat_id=message.chat.id,
-            videoid=videoid,
-            user_id=requester_id,
+        run = await message.reply_photo(
+            photo=image if image else config.STREAM_IMG_URL,
             caption=_["stream_1"].format(
                 f"https://t.me/{app.username}?start=info_{videoid}",
                 title[:23],
                 check[0]["dur"],
                 user,
             ),
-            button=button,
-            markup="stream",
+            reply_markup=InlineKeyboardMarkup(button),
         )
+        db[chat_id][0]["mystic"] = run
+        db[chat_id][0]["markup"] = "stream"
         await mystic.delete()
+
     elif "index_" in queued:
         try:
-            await JARVIS.skip_stream(chat_id, videoid, video=status)
+            await SHUKLA.skip_stream(chat_id, videoid, video=status)
         except:
             return await message.reply_text(_["call_6"])
         button = stream_markup(_, chat_id)
@@ -191,6 +188,7 @@ async def skip(cli, message: Message, _, chat_id):
         )
         db[chat_id][0]["mystic"] = run
         db[chat_id][0]["markup"] = "tg"
+
     else:
         if videoid == "telegram":
             image = None
@@ -202,10 +200,10 @@ async def skip(cli, message: Message, _, chat_id):
             except:
                 image = None
         try:
-            await JARVIS.skip_stream(chat_id, queued, video=status, image=image)
+            await SHUKLA.skip_stream(chat_id, queued, video=status, image=image)
         except:
             return await message.reply_text(_["call_6"])
-            
+
         if videoid == "telegram":
             button = stream_markup(_, chat_id)
             run = await message.reply_photo(
@@ -234,17 +232,15 @@ async def skip(cli, message: Message, _, chat_id):
             db[chat_id][0]["markup"] = "tg"
         else:
             button = stream_markup(_, chat_id)
-            schedule_stream_card(
-                chat_id=chat_id,
-                original_chat_id=message.chat.id,
-                videoid=videoid,
-                user_id=requester_id,
+            run = await message.reply_photo(
+                photo=image if image else config.STREAM_IMG_URL,
                 caption=_["stream_1"].format(
                     f"https://t.me/{app.username}?start=info_{videoid}",
                     title[:23],
                     check[0]["dur"],
                     user,
                 ),
-                button=button,
-                markup="stream",
+                reply_markup=InlineKeyboardMarkup(button),
             )
+            db[chat_id][0]["mystic"] = run
+            db[chat_id][0]["markup"] = "stream"
