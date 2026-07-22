@@ -25,68 +25,69 @@ class AdvancedAutoplay:
         self.locks: Dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self.providers = ["shruti", "inflex", "youtube_native"]
         
-        # 🚀 PREFETCH CACHE: Skip lag khatam karne ke liye
+        # 🚀 PREFETCH CACHE: Skip lag bilkul khatam karne ke liye
         self.prefetched_tracks: Dict[int, list] = defaultdict(list)
 
-        # 🔥 MASSIVE CATEGORIZED ARTIST DATABASE
+        # 🛡️ FAILSAFE TRACKS: Agar internet dhoka de toh bot ye gaane play karega, par VC NAHI chhodega
+        self.FAILSAFE_TRACKS = [
+            {"vidid": "v7K4vGYL9zI", "title": "Tu Aake Dekhle - King", "duration": "4:30"},
+            {"vidid": "1kPOAMTgiOQ", "title": "Chaleya - Jawan | Shah Rukh Khan", "duration": "3:20"},
+            {"vidid": "kJQP7kiw5Fk", "title": "Luis Fonsi - Despacito", "duration": "4:41"},
+            {"vidid": "UoOXi8zG1Uo", "title": "Sai Sai Kham Leng - Myanmar Hit", "duration": "4:15"},
+            {"vidid": "2Vv-BfVoq4g", "title": "Ed Sheeran - Perfect", "duration": "4:23"},
+            {"vidid": "7Qp5vcuMIlk", "title": "Pawan Singh - Lollypop Lagelu", "duration": "3:10"},
+            {"vidid": "fLEXgOxsZu0", "title": "Bruno Mars - The Lazy Song", "duration": "3:19"}
+        ]
+
+        # 🔥 MASSIVE CATEGORIZED ARTIST DATABASE (Myanmar & All Countries Added)
         self.artist_categories = {
+            "myanmar_burmese": [
+                "sai sai kham leng", "ni ni khin zaw", "shwe htoo", "raymond", 
+                "idiots band", "lay phyu", "myo gyi", "ah moon", "y-z", "burmese", "myanmar"
+            ],
+            "nepali": [
+                "narayan gopal", "sushant kc", "sajjan raj vaidya", "bipul chettri", "nepali"
+            ],
+            "bengali": [
+                "arijit singh bengali", "shreya ghoshal bengali", "upamanyu", "fossils", "anupam roy"
+            ],
             "bhojpuri": [
                 "pawan singh", "khesari lal yadav", "shilpi raj", "antra singh", "pramod premi", 
-                "ritesh pandey", "arvind akela kallu", "gunjan singh", "samar singh", "neha raj", 
-                "manoj tiwari", "ravi kishan", "dinesh lal yadav", "nirahua", "kalpana", 
-                "indu sonali", "priyanka singh", "ankush raja", "golu gold", "neelkamal singh", 
-                "rakesh mishra", "akshara singh", "mohan rathore", "khushboo tiwari"
+                "ritesh pandey", "arvind akela kallu", "gunjan singh", "samar singh", "neha raj"
             ],
             "hindi": [
                 "arijit singh", "shreya ghoshal", "atif aslam", "neha kakkar", "jubin nautiyal", 
                 "darshan raval", "armaan malik", "sonu nigam", "badshah", "sunidhi chauhan", 
                 "udit narayan", "kumar sanu", "alka yagnik", "sachet tandon", "parampara", 
-                "b praak", "vishal mishra", "shilpa rao", "kk", "mohit chauhan", "ar rahman", 
-                "pritam", "mithoon", "kishore kumar", "lata mangeshkar", "asha bhosle", 
-                "mukesh", "mohammed rafi", "mika singh", "yo yo honey singh", "guru randhawa", 
-                "tony kakkar", "neeti mohan", "monali thakur", "palak muchhal", "amit trivedi", 
-                "rahat fateh ali khan", "shafqat amanat ali", "tulsi kumar", "amaal mallik", 
-                "stebin ben", "javed ali", "kailash kher", "shankar mahadevan", "dhvani bhanushali"
+                "b praak", "vishal mishra", "shilpa rao", "kk", "mohit chauhan", "ar rahman"
             ],
             "punjabi": [
                 "sidhu moose wala", "karan aujla", "diljit dosanjh", "ap dhillon", "amrit maan", 
-                "shubh", "kaka", "hardy sandhu", "guru randhawa", "jass manak", "parmish verma", 
-                "jaani", "ammy virk", "garry sandhu", "jassie gill", "babbu maan", "gurdas maan", 
-                "sharry mann", "mankirt aulakh", "nimrat khaira", "jasmine sandlas", "sunanda sharma", 
-                "bohemia", "imran khan", "jazzy b", "gippy grewal", "akhil", "prabh gill", "guri", 
-                "tarsem jassar", "ranjit bawa"
+                "shubh", "kaka", "hardy sandhu", "guru randhawa", "jass manak", "parmish verma"
             ],
             "haryanvi": [
                 "sapna choudhary", "renuka panwar", "gulzaar chhaniwala", "sumit goswami", 
-                "raju punjabi", "amit saini rohtakiya", "pranjal dahiya", "md kd", "masoom sharma", 
-                "fazilpuria", "gajender phogat", "vikas kumar", "raj mawar", "surender romio", 
-                "ruchika jangid", "anu kadyan", "diler kharkiya", "kd desi rock", "ajay hooda", 
-                "anjali raghav"
+                "raju punjabi", "amit saini rohtakiya", "pranjal dahiya", "md kd"
             ],
             "south": [
                 "anirudh", "ar rahman", "yuvan shankar raja", "sid sriram", "harris jayaraj", 
-                "ilaiyaraaja", "spb", "s p balasubrahmanyam", "k s chithra", "sujatha", 
-                "karthik", "vijay prakash", "benny dayal", "haricharan", "d imman", 
-                "g v prakash", "santhosh narayanan", "devi sri prasad", "dsp", "thaman", 
-                "anurag kulkarni", "mangli", "mm keeravani", "mani sharma", "sunitha", 
-                "geetha madhuri", "rahul sipligunj", "ram miriyala"
+                "ilaiyaraaja", "spb", "s p balasubrahmanyam", "k s chithra", "devi sri prasad"
             ],
-            "english": [
+            "english_global": [
                 "taylor swift", "justin bieber", "ed sheeran", "ariana grande", "the weeknd", 
                 "drake", "eminem", "billie eilish", "dua lipa", "post malone", "harry styles", 
                 "selena gomez", "bruno mars", "maroon 5", "coldplay", "imagine dragons", 
-                "rihanna", "beyonce", "adele", "lady gaga", "katy perry", "shawn mendes", 
-                "charlie puth", "olivia rodrigo", "doja cat", "lil nas x", "kendrick lamar", 
-                "j cole", "travis scott", "miley cyrus", "shakira", "david guetta", "calvin harris", 
-                "alan walker", "marshmello"
+                "alan walker", "marshmello", "charlie puth", "shakira"
             ]
         }
 
     async def _fetch_from_youtube_native(self, vidid: str) -> List[dict]:
         """Ultimate Vibe & Artist Matching Engine"""
         try:
+            # ⏱️ TIMEOUT ADDED: Taaki bot hang na ho
             current_search = VideosSearch(f"https://youtube.com/watch?v={vidid}", limit=1)
-            current_result = await current_search.next()
+            current_result = await asyncio.wait_for(current_search.next(), timeout=4.0)
+            
             if not current_result or not current_result.get("result"):
                 return []
                 
@@ -99,7 +100,7 @@ class AdvancedAutoplay:
             detected_category = ""
             detected_artist = ""
             
-            # 🔥 Detect EXACT Artist and Category
+            # Categories match karna
             for category, artists in self.artist_categories.items():
                 for a in artists:
                     if a in title or a in channel_name:
@@ -109,7 +110,6 @@ class AdvancedAutoplay:
                 if detected_artist:
                     break
                     
-            # 🔥 Smart Query Builder
             if detected_artist and detected_category:
                 search_query = f"{detected_artist} {detected_category} hit audio songs"
             elif channel_name:
@@ -119,18 +119,17 @@ class AdvancedAutoplay:
                 search_query = f"{short_title} similar audio tracks"
 
             results = VideosSearch(search_query, limit=15)
-            res = await results.next()
+            # ⏱️ TIMEOUT ADDED: Hang rokne ke liye
+            res = await asyncio.wait_for(results.next(), timeout=4.0)
             
             tracks = []
             if res and res.get("result"):
                 for track in res["result"]:
                     new_title = track.get("title", "").lower()
                     
-                    # ANTI-REMIX
+                    # ANTI-REMIX & ANTI-TRASH
                     if len(clean_title) > 3 and clean_title in new_title:
                         continue
-                    
-                    # ANTI-TRASH
                     if any(w in new_title for w in ["news", "vlog", "interview", "podcast", "trailer", "teaser", "movie", "review", "reaction", "scene"]):
                         continue
                         
@@ -142,6 +141,9 @@ class AdvancedAutoplay:
                             "duration": dur_str
                         })
             return tracks
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ YouTube Search Timed Out! Bach gaye hang hone se.")
+            return []
         except Exception as e:
             logger.warning(f"⚠️ Native YouTube Search Error: {e}")
             return []
@@ -178,7 +180,7 @@ class AdvancedAutoplay:
             duration = track.get("duration", 0)
             if isinstance(duration, str) and ":" in duration:
                 parts = duration.split(":")
-                # 🔥 STRICT TIMER 1: Reject hours long tracks (1:26:00)
+                # 🔥 STRICT TIMER 1: Reject hour long tracks
                 if len(parts) > 2: 
                     return False 
                 dur_sec = sum(int(x) * (60 ** i) for i, x in enumerate(reversed(parts)))
@@ -206,22 +208,15 @@ class AdvancedAutoplay:
                         if await self._validate_track(track):
                             return track
                             
-        # LAST RESORT
-        try:
-            fallback_search = VideosSearch("latest hit audio songs 2024", limit=10)
-            res = await fallback_search.next()
-            if res and res.get("result"):
-                for track in res["result"]:
-                    vidid = track.get("id")
-                    if vidid and vidid not in self.history[chat_id]:
-                        track["vidid"] = vidid
-                        if await self._validate_track(track):
-                            return track
-        except: pass
-        return None
+        # 🔥 100% FAILSAFE: Agar internet block bhi ho gaya toh ye gaane baja dega
+        for _ in range(5):
+            safe_track = random.choice(self.FAILSAFE_TRACKS)
+            if safe_track["vidid"] not in self.history[chat_id]:
+                return safe_track
+        return random.choice(self.FAILSAFE_TRACKS)
 
     async def _background_prefetch(self, chat_id: int, current_vidid: str):
-        """🚀 BACKGROUND PREFETCH: Zero Lag Skip"""
+        """🚀 BACKGROUND PREFETCH"""
         try:
             if len(self.prefetched_tracks[chat_id]) < 2:
                 track = await self.get_valid_next_track(chat_id, current_vidid)
@@ -235,29 +230,35 @@ class AdvancedAutoplay:
         async with self.locks[chat_id]: 
             try:
                 logger.info(f"🔄 Autoplay Processing {chat_id}")
-                
                 next_track = None
                 
-                # 🚀 ZERO-LAG SKIP FIX
                 if self.prefetched_tracks[chat_id]:
                     next_track = self.prefetched_tracks[chat_id].pop(0)
-                    logger.info("⚡ Using pre-fetched track for zero lag!")
                 else:
-                    next_track = await self.get_valid_next_track(chat_id, current_vidid)
+                    try:
+                        # Force a timeout on the whole process just in case
+                        next_track = await asyncio.wait_for(self.get_valid_next_track(chat_id, current_vidid), timeout=8.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Main process timed out! Using Failsafe.")
+                        next_track = random.choice(self.FAILSAFE_TRACKS)
 
                 if not next_track:
-                    return False
+                    next_track = random.choice(self.FAILSAFE_TRACKS)
 
                 vidid = next_track['vidid']
                 self.history[chat_id].append(vidid)
 
                 await self.stream_client._enqueue_autoplay_track(chat_id, next_track)
-                
-                # PREPARE NEXT SONG IMMEDIATELY
                 asyncio.create_task(self._background_prefetch(chat_id, vidid))
                 
                 return True
 
             except Exception as e:
                 logger.error(f"❌ Autoplay crash in {chat_id}: {e}")
-                return False
+                # Crash hone par bhi VC nahi chhodega!
+                try:
+                    safe_track = random.choice(self.FAILSAFE_TRACKS)
+                    await self.stream_client._enqueue_autoplay_track(chat_id, safe_track)
+                    return True
+                except:
+                    return False
