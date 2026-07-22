@@ -9,7 +9,6 @@ from pyrogram.types import Message
 from py_yt import VideosSearch, Playlist
 import aiohttp
 
-# --- 🔥 NAYA URL YAHAN BHI UPDATE KIYA HAI ---
 API_URL = os.environ.get("SHRUTI_API_URL", "https://shrutibots.site")
 API_KEY = os.environ.get("SHRUTI_API_KEY", "ShrutiBotswUiyhdS8Fmjt8limDX69") 
 
