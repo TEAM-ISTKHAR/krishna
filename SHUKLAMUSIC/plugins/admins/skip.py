@@ -5,7 +5,7 @@ import config
 from SHUKLAMUSIC import YouTube, app
 from SHUKLAMUSIC.core.call import SHUKLA 
 from SHUKLAMUSIC.misc import db
-from SHUKLAMUSIC.utils.database import get_loop
+from SHUKLAMUSIC.utils.database import get_loop, get_autoplay
 from SHUKLAMUSIC.utils.decorators import AdminRightsCheck
 from SHUKLAMUSIC.utils.inline import close_markup, stream_markup
 from SHUKLAMUSIC.utils.stream.autoclear import auto_clean
@@ -39,23 +39,29 @@ async def skip(cli, message: Message, _, chat_id):
                             if popped:
                                 await auto_clean(popped)
                             if not check:
-                                # 🔥 AUTOPLAY INJECTION (MULTI-SKIP)
-                                if await SHUKLA._enqueue_autoplay_track(chat_id, popped):
-                                    check = db.get(chat_id)
-                                    break
-                                else:
-                                    try:
-                                        await message.reply_text(
-                                            text=_["admin_6"].format(
-                                                message.from_user.mention,
-                                                message.chat.title,
-                                            ),
-                                            reply_markup=close_markup(_),
-                                        )
-                                        await SHUKLA.stop_stream(chat_id)
-                                    except:
-                                        return
-                                    break
+                                # 🔥 ADVANCED AUTOPLAY INJECTION (MULTI-SKIP)
+                                try:
+                                    auto_on = await get_autoplay(chat_id)
+                                except Exception:
+                                    auto_on = False
+                                    
+                                if auto_on and popped:
+                                    if await SHUKLA.autoplay_manager.process_autoplay(chat_id, popped.get("vidid")):
+                                        check = db.get(chat_id)
+                                        break
+                                
+                                try:
+                                    await message.reply_text(
+                                        text=_["admin_6"].format(
+                                            message.from_user.mention,
+                                            message.chat.title,
+                                        ),
+                                        reply_markup=close_markup(_),
+                                    )
+                                    await SHUKLA.stop_stream(chat_id)
+                                except:
+                                    return
+                                break
                     else:
                         return await message.reply_text(_["admin_11"].format(count))
                 else:
@@ -72,10 +78,18 @@ async def skip(cli, message: Message, _, chat_id):
             if popped:
                 await auto_clean(popped)
             if not check:
-                # 🔥 AUTOPLAY INJECTION (SINGLE SKIP)
-                if await SHUKLA._enqueue_autoplay_track(chat_id, popped):
-                    check = db.get(chat_id)
-                else:
+                # 🔥 ADVANCED AUTOPLAY INJECTION (SINGLE SKIP)
+                try:
+                    auto_on = await get_autoplay(chat_id)
+                except Exception:
+                    auto_on = False
+                    
+                if auto_on and popped:
+                    if await SHUKLA.autoplay_manager.process_autoplay(chat_id, popped.get("vidid")):
+                        check = db.get(chat_id)
+                
+                # Agar Autoplay off hai ya fail hua toh VC chhod do
+                if not check:
                     await message.reply_text(
                         text=_["admin_6"].format(
                             message.from_user.mention, message.chat.title
@@ -98,7 +112,7 @@ async def skip(cli, message: Message, _, chat_id):
             except:
                 return
 
-    # Uske baad automatically check[0] wala play ho jayega (yaani tumhara naya Autoplay gaana)
+    # Uske baad automatically check[0] wala play ho jayega (Naya Autoplay gaana)
     queued = check[0]["file"]
     title = (check[0]["title"]).title()
     user = check[0]["by"]
