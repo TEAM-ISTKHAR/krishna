@@ -1,16 +1,3 @@
-# -----------------------------------------------
-# 🔸 StrangerMusic Project
-# 🔹 Developed & Maintained by: Shashank Shukla (https://github.com/itzshukla)
-# 📅 Copyright © 2022 – All Rights Reserved
-#
-# 📖 License:
-# This source code is open for educational and non-commercial use ONLY.
-# You are required to retain this credit in all copies or substantial portions of this file.
-# Commercial use, redistribution, or removal of this notice is strictly prohibited
-# without prior written permission from the author.
-#
-# ❤️ Made with dedication and love by ItzShukla
-# -----------------------------------------------
 import random
 from typing import Dict, List, Union
 from SHUKLAMUSIC import userbot
@@ -209,8 +196,6 @@ async def set_upvotes(chat_id: int, mode: int):
     await countdb.update_one(
         {"chat_id": chat_id}, {"$set": {"mode": mode}}, upsert=True
     )
-
-
 async def is_autoend() -> bool:
     chat_id = 1234
     user = await autoenddb.find_one({"chat_id": chat_id})
@@ -398,7 +383,6 @@ async def check_nonadmin_chat(chat_id: int) -> bool:
         return False
     return True
 
-
 async def is_nonadmin_chat(chat_id: int) -> bool:
     mode = nonadmin.get(chat_id)
     if not mode:
@@ -446,8 +430,6 @@ async def add_off(on_off: int):
     if not is_off:
         return
     return await onoffdb.delete_one({"on_off": on_off})
-
-
 async def is_maintenance():
     if not maintenance:
         get = await onoffdb.find_one({"on_off": 1})
@@ -720,14 +702,14 @@ async def remove_card(cc: str):
 # --- AUTOPLAY DATABASE FUNCTIONS ---
 autoplaydb = mongodb["autoplay"]
 
-async def is_autoplay(chat_id: int) -> bool:
+async def is_autoplay_on(chat_id: int) -> bool:
     chat = await autoplaydb.find_one({"chat_id": chat_id})
     if not chat:
         return False
     return True
 
 async def get_autoplay(chat_id: int) -> bool:
-    return await is_autoplay(chat_id)
+    return await is_autoplay_on(chat_id)
 
 async def set_autoplay(chat_id: int, state: bool):
     if state:
@@ -744,4 +726,3 @@ async def autoplay_on(chat_id: int):
 
 async def autoplay_off(chat_id: int):
     await set_autoplay(chat_id, False)
-
