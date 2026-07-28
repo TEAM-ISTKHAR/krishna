@@ -24,7 +24,7 @@ from SHUKLAMUSIC.utils.database import (
     set_loop,
 )
 from SHUKLAMUSIC.utils.autoplay import fetch_autoplay_track, remember_played
-from ShiviMusic.utils.exceptions import AssistantErr
+from SHUKLAMUSIC.utils.exceptions import AssistantErr
 from SHUKLAMUSIC.utils.formatters import check_duration, seconds_to_min, speed_converter
 from SHUKLAMUSIC.utils.inline.play import stream_markup
 from SHUKLAMUSIC.utils.stream.autoclear import auto_clean
