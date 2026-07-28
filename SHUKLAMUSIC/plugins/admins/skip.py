@@ -3,14 +3,14 @@ from pyrogram.types import InlineKeyboardMarkup, Message
 
 import config
 from SHUKLAMUSIC import YouTube, app
-from SHUKLAMUSIC.core.call import SHUKLA 
+from SHUKLAMUSIC.core.call import SHUKLA
 from SHUKLAMUSIC.misc import db
-from SHUKLAMUSIC.utils.database import get_loop, get_autoplay
+from SHUKLAMUSIC.utils.database import get_loop, is_autoplay_on
 from SHUKLAMUSIC.utils.decorators import AdminRightsCheck
 from SHUKLAMUSIC.utils.inline import close_markup, stream_markup
 from SHUKLAMUSIC.utils.stream.autoclear import auto_clean
+from SHUKLAMUSIC.utils.thumbnails import get_thumb
 from config import BANNED_USERS
-
 
 @app.on_message(
     filters.command(["skip", "cskip", "next", "cnext"], prefixes=["/", "!"]) & filters.group & ~BANNED_USERS
@@ -39,17 +39,16 @@ async def skip(cli, message: Message, _, chat_id):
                             if popped:
                                 await auto_clean(popped)
                             if not check:
-                                # 🔥 ADVANCED AUTOPLAY INJECTION (MULTI-SKIP)
-                                try:
-                                    auto_on = await get_autoplay(chat_id)
-                                except Exception:
-                                    auto_on = False
-                                    
-                                if auto_on and popped:
-                                    if await SHUKLA.autoplay_manager.process_autoplay(chat_id, popped.get("vidid")):
-                                        check = db.get(chat_id)
-                                        break
-                                
+                                started = False
+                                if popped and await is_autoplay_on(chat_id):
+                                    started = await SHUKLA.autoplay_start(
+                                        chat_id,
+                                        popped.get("chat_id", chat_id),
+                                        popped.get("title"),
+                                        popped.get("vidid"),
+                                    )
+                                if started:
+                                    return
                                 try:
                                     await message.reply_text(
                                         text=_["admin_6"].format(
@@ -60,8 +59,8 @@ async def skip(cli, message: Message, _, chat_id):
                                     )
                                     await SHUKLA.stop_stream(chat_id)
                                 except:
-                                    return
-                                break
+                                    pass
+                                return
                     else:
                         return await message.reply_text(_["admin_11"].format(count))
                 else:
@@ -78,28 +77,26 @@ async def skip(cli, message: Message, _, chat_id):
             if popped:
                 await auto_clean(popped)
             if not check:
-                # 🔥 ADVANCED AUTOPLAY INJECTION (SINGLE SKIP)
-                try:
-                    auto_on = await get_autoplay(chat_id)
-                except Exception:
-                    auto_on = False
-                    
-                if auto_on and popped:
-                    if await SHUKLA.autoplay_manager.process_autoplay(chat_id, popped.get("vidid")):
-                        check = db.get(chat_id)
-                
-                # Agar Autoplay off hai ya fail hua toh VC chhod do
-                if not check:
-                    await message.reply_text(
-                        text=_["admin_6"].format(
-                            message.from_user.mention, message.chat.title
-                        ),
-                        reply_markup=close_markup(_),
+                started = False
+                if popped and await is_autoplay_on(chat_id):
+                    started = await SHUKLA.autoplay_start(
+                        chat_id,
+                        popped.get("chat_id", chat_id),
+                        popped.get("title"),
+                        popped.get("vidid"),
                     )
-                    try:
-                        return await SHUKLA.stop_stream(chat_id)
-                    except:
-                        return
+                if started:
+                    return
+                await message.reply_text(
+                    text=_["admin_6"].format(
+                        message.from_user.mention, message.chat.title
+                    ),
+                    reply_markup=close_markup(_),
+                )
+                try:
+                    return await SHUKLA.stop_stream(chat_id)
+                except:
+                    return
         except:
             try:
                 await message.reply_text(
@@ -111,24 +108,22 @@ async def skip(cli, message: Message, _, chat_id):
                 return await SHUKLA.stop_stream(chat_id)
             except:
                 return
-
-    # Uske baad automatically check[0] wala play ho jayega (Naya Autoplay gaana)
+                
     queued = check[0]["file"]
     title = (check[0]["title"]).title()
     user = check[0]["by"]
-    requester_id = check[0].get("user_id")
     streamtype = check[0]["streamtype"]
     videoid = check[0]["vidid"]
     status = True if str(streamtype) == "video" else None
     db[chat_id][0]["played"] = 0
     exis = (check[0]).get("old_dur")
-
+    
     if exis:
         db[chat_id][0]["dur"] = exis
         db[chat_id][0]["seconds"] = check[0]["old_second"]
         db[chat_id][0]["speed_path"] = None
         db[chat_id][0]["speed"] = 1.0
-
+        
     if "live_" in queued:
         n, link = await YouTube.video(videoid, True)
         if n == 0:
@@ -142,8 +137,9 @@ async def skip(cli, message: Message, _, chat_id):
         except:
             return await message.reply_text(_["call_6"])
         button = stream_markup(_, chat_id)
+        img = await get_thumb(videoid)
         run = await message.reply_photo(
-            photo=image if image else config.STREAM_IMG_URL,
+            photo=img,
             caption=_["stream_1"].format(
                 f"https://t.me/{app.username}?start=info_{videoid}",
                 title[:23],
@@ -154,7 +150,7 @@ async def skip(cli, message: Message, _, chat_id):
         )
         db[chat_id][0]["mystic"] = run
         db[chat_id][0]["markup"] = "tg"
-
+        
     elif "vid_" in queued:
         mystic = await message.reply_text(_["call_7"], disable_web_page_preview=True)
         try:
@@ -175,8 +171,9 @@ async def skip(cli, message: Message, _, chat_id):
         except:
             return await mystic.edit_text(_["call_6"])
         button = stream_markup(_, chat_id)
+        img = await get_thumb(videoid)
         run = await message.reply_photo(
-            photo=image if image else config.STREAM_IMG_URL,
+            photo=img,
             caption=_["stream_1"].format(
                 f"https://t.me/{app.username}?start=info_{videoid}",
                 title[:23],
@@ -188,7 +185,7 @@ async def skip(cli, message: Message, _, chat_id):
         db[chat_id][0]["mystic"] = run
         db[chat_id][0]["markup"] = "stream"
         await mystic.delete()
-
+        
     elif "index_" in queued:
         try:
             await SHUKLA.skip_stream(chat_id, videoid, video=status)
@@ -202,7 +199,7 @@ async def skip(cli, message: Message, _, chat_id):
         )
         db[chat_id][0]["mystic"] = run
         db[chat_id][0]["markup"] = "tg"
-
+        
     else:
         if videoid == "telegram":
             image = None
@@ -217,7 +214,7 @@ async def skip(cli, message: Message, _, chat_id):
             await SHUKLA.skip_stream(chat_id, queued, video=status, image=image)
         except:
             return await message.reply_text(_["call_6"])
-
+            
         if videoid == "telegram":
             button = stream_markup(_, chat_id)
             run = await message.reply_photo(
@@ -246,8 +243,9 @@ async def skip(cli, message: Message, _, chat_id):
             db[chat_id][0]["markup"] = "tg"
         else:
             button = stream_markup(_, chat_id)
+            img = await get_thumb(videoid)
             run = await message.reply_photo(
-                photo=image if image else config.STREAM_IMG_URL,
+                photo=img,
                 caption=_["stream_1"].format(
                     f"https://t.me/{app.username}?start=info_{videoid}",
                     title[:23],
