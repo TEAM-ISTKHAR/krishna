@@ -1,16 +1,3 @@
-# -----------------------------------------------
-# 🔸 StrangerMusic Project
-# 🔹 Developed & Maintained by: Shashank Shukla (https://github.com/itzshukla)
-# 📅 Copyright © 2022 – All Rights Reserved
-#
-# 📖 License:
-# This source code is open for educational and non-commercial use ONLY.
-# You are required to retain this credit in all copies or substantial portions of this file.
-# Commercial use, redistribution, or removal of this notice is strictly prohibited
-# without prior written permission from the author.
-#
-# ❤️ Made with dedication and love by ItzShukla
-# -----------------------------------------------
 import re
 import aiohttp
 from pyrogram import Client, filters
@@ -51,12 +38,22 @@ if hasattr(filters, "video_chat_participants_invited"):
 async def calculate_math(_, message: Message):
     if len(message.command) < 2:
         return await message.reply_text("❌ Usage:\n`/math 2+2`", quote=True)
+    
     expression = message.text.split(None, 1)[1]
+    
+    # 🔥 SECURITY CHECK: Only allow numbers and basic math operators. No letters allowed!
+    if not re.match(r'^[0-9\+\-\*\/\(\)\.\s]+$', expression):
+        return await message.reply_text("❌ **Unsafe or invalid expression! Only numbers and basic math symbols are allowed.**", quote=True)
+        
     try:
-        result = eval(expression)
+        # Safe eval execution to prevent remote code execution (RCE)
+        result = eval(expression, {"__builtins__": None}, {})
         response = f"✅ **Result:** `{result}`"
+    except ZeroDivisionError:
+        response = "❌ **Error: Division by zero is not allowed.**"
     except Exception:
         response = "❌ **Invalid expression**"
+        
     await message.reply_text(response, quote=True)
 
 
