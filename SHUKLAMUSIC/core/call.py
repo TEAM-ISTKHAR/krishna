@@ -364,7 +364,7 @@ class Call(PyTgCalls):
             await assistant.leave_call(config.LOG_GROUP_ID, close=False)
         except Exception:
             pass
-async def join_call(
+    async def join_call(
         self,
         chat_id: int,
         original_chat_id: int,
