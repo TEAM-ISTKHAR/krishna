@@ -45,9 +45,9 @@ from strings import get_string
 welcome_db = db.welcome_config 
 
 YUMI_PICS = [
-"https://files.catbox.moe/5go4t6.jpg",
-"https://files.catbox.moe/vbdda6.jpg",
-"https://files.catbox.moe/l2id2z.jpg",  
+"https://n.uguu.se/DlpFAoxS.jpg",
+"https://d.uguu.se/jtBiNkmc.jpg",
+"https://d.uguu.se/KwggKBlJ.jpg",  
 
 ]
 
