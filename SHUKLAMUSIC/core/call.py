@@ -230,7 +230,6 @@ class Call(PyTgCalls):
             await assistant.leave_call(chat_id, close=False)
         except Exception:
             pass
-
     async def skip_stream(
         self,
         chat_id: int,
@@ -346,6 +345,15 @@ class Call(PyTgCalls):
             db[chat_id][0]["markup"] = "stream"
         except Exception:
             pass
+            
+        # ==========================================
+        # 🔥 AUTOPLAY LOGGER INJECTION 🔥
+        try:
+            from SHUKLAMUSIC.utils.logger import autoplay_log
+            await autoplay_log(app, original_chat_id, title)
+        except Exception as e:
+            LOGGER(__name__).warning(f"Autoplay logger error: {e}")
+        # ==========================================
 
         if status_msg:
             try:
@@ -364,6 +372,7 @@ class Call(PyTgCalls):
             await assistant.leave_call(config.LOG_GROUP_ID, close=False)
         except Exception:
             pass
+
     async def join_call(
         self,
         chat_id: int,
