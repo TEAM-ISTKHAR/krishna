@@ -1,9 +1,7 @@
 import os
 import re
-import random
 import aiohttp
 import aiofiles
-import colorsys
 from unidecode import unidecode
 from functools import lru_cache
 from typing import Tuple
@@ -15,8 +13,7 @@ FONT_BOLD   = os.path.join(ASSETS, "f.ttf")
 FONT_NORMAL = os.path.join(ASSETS, "cfont.ttf")
 
 # ═══════════════════════════════════════════════════════════════════
-# THUMBNAIL GENERATOR - VERSION 6.0 (Perfect Match Edition)
-# Fixes: Custom drawn icons (No Emoji Font needed), Fixed text sizing
+# THUMBNAIL GENERATOR - 100% PERFECT MATCH EDITION
 # ═══════════════════════════════════════════════════════════════════
 
 W, H = 1280, 720
@@ -30,43 +27,38 @@ def _get_font(path: str, size: int) -> ImageFont.FreeTypeFont:
     try:
         return ImageFont.truetype(path, size)
     except Exception:
-        # Fallback to system fonts if custom font is missing so text doesn't shrink
-        fallbacks = ["arial.ttf", "DejaVuSans.ttf", "seguiemj.ttf"]
-        for fb in fallbacks:
-            try:
-                return ImageFont.truetype(fb, size)
-            except:
-                pass
-        try:
-            return ImageFont.load_default(size=size) # For Pillow >= 10
-        except:
-            return ImageFont.load_default()
+        try: return ImageFont.load_default(size=size)
+        except: return ImageFont.load_default()
 
 def _get_gradient(w, h):
     gradient = Image.new('RGBA', (w, h))
     draw = ImageDraw.Draw(gradient)
     for x in range(w):
         ratio = x / w
-        if ratio < 0.45:
-            r1 = ratio / 0.45
-            r = int(60 + (160 - 60) * r1)
-            g = int(180 + (230 - 180) * r1)
-            b = int(240 + (80 - 240) * r1)
+        if ratio < 0.5:
+            # Cyan to Green
+            rat = ratio / 0.5
+            r = int(60 + (150 - 60) * rat)
+            g = int(180 + (230 - 180) * rat)
+            b = int(240 + (80 - 240) * rat)
         else:
-            r1 = (ratio - 0.45) / 0.55
-            r = int(160 + (240 - 160) * r1)
-            g = int(230 + (100 - 230) * r1)
-            b = int(80 + (160 - 80) * r1)
+            # Green to Pink
+            rat = (ratio - 0.5) / 0.5
+            r = int(150 + (240 - 150) * rat)
+            g = int(230 + (100 - 230) * rat)
+            b = int(80 + (160 - 80) * rat)
         draw.line([(x, 0), (x, h)], fill=(r, g, b, 255))
     return gradient
 
-def _draw_neon_card(base, box, radius, gradient, stroke_width=4, glow_spread=18, is_image=False):
+def _draw_neon_card(base, box, radius, gradient, stroke_width=3, glow_spread=25, is_image=False):
+    # Background glass for main card
     if not is_image:
         card_bg = Image.new('RGBA', base.size, (0, 0, 0, 0))
         draw_bg = ImageDraw.Draw(card_bg)
-        draw_bg.rounded_rectangle(box, radius=radius, fill=(20, 20, 20, 160))
+        draw_bg.rounded_rectangle(box, radius=radius, fill=(22, 22, 22, 140))
         base = Image.alpha_composite(base.convert('RGBA'), card_bg)
 
+    # Glow Mask
     glow_mask = Image.new('L', base.size, 0)
     glow_draw = ImageDraw.Draw(glow_mask)
     glow_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width + 4)
@@ -74,6 +66,7 @@ def _draw_neon_card(base, box, radius, gradient, stroke_width=4, glow_spread=18,
     glow_layer = Image.new('RGBA', base.size, (0, 0, 0, 0))
     glow_layer.paste(gradient, mask=glow_mask)
 
+    # Solid Stroke
     border_mask = Image.new('L', base.size, 0)
     border_draw = ImageDraw.Draw(border_mask)
     border_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width)
@@ -90,7 +83,7 @@ def _crop_center_square(img):
     left, top = (w - m) / 2, (h - m) / 2
     return img.crop((left, top, left + m, top + m))
 
-def _paste_rounded(base, img, x, y, size, r=20):
+def _paste_rounded(base, img, x, y, size, r=25):
     img = img.resize((size, size), Image.LANCZOS).convert("RGBA")
     mask = Image.new("L", (size, size), 0)
     ImageDraw.Draw(mask).rounded_rectangle([(0, 0), (size - 1, size - 1)], radius=r, fill=255)
@@ -103,35 +96,35 @@ def _truncate(draw, text, font, max_w):
     while text and draw.textlength(text + "...", font=font) > max_w: text = text[:-1]
     return text + "..."
 
-# 🔥 Custom Icon Drawer (Emoji Font Ki Zarurat Nahi!)
-def _draw_icon(draw, icon_name, x, y, color):
+def _draw_vector_icon(draw, icon_name, x, y, color):
+    w = 3
     if icon_name == "shuffle":
-        draw.line([x-10, y-6, x+10, y+6], fill=color, width=3)
-        draw.line([x-10, y+6, x+10, y-6], fill=color, width=3)
-        draw.polygon([x+10, y+6, x+5, y+6, x+10, y+1], fill=color)
-        draw.polygon([x+10, y-6, x+5, y-6, x+10, y-1], fill=color)
+        draw.line([x-12, y-6, x+10, y+6], fill=color, width=w)
+        draw.line([x-12, y+6, x+10, y-6], fill=color, width=w)
+        draw.polygon([x+12, y+8, x+5, y+9, x+9, y+2], fill=color)
+        draw.polygon([x+12, y-8, x+5, y-9, x+9, y-2], fill=color)
     elif icon_name == "repeat":
-        draw.arc([x-10, y-10, x+10, y+10], 45, 315, fill=color, width=3)
-        draw.polygon([x+6, y-14, x+13, y-9, x+5, y-5], fill=color)
+        draw.arc([x-12, y-10, x+12, y+10], 45, 315, fill=color, width=w)
+        draw.polygon([x+8, y-15, x+15, y-9, x+6, y-5], fill=color)
     elif icon_name == "prev":
         draw.rectangle([x-14, y-8, x-10, y+8], fill=color)
-        draw.polygon([x-10, y, x-2, y-8, x-2, y+8], fill=color)
-        draw.polygon([x-2, y, x+6, y-8, x+6, y+8], fill=color)
+        draw.polygon([x-8, y, x+2, y-8, x+2, y+8], fill=color)
+        draw.polygon([x+2, y, x+12, y-8, x+12, y+8], fill=color)
     elif icon_name == "pause":
-        draw.rectangle([x-8, y-9, x-2, y+9], fill=color)
-        draw.rectangle([x+2, y-9, x+8, y+9], fill=color)
+        draw.rectangle([x-7, y-9, x-2, y+9], fill=color)
+        draw.rectangle([x+2, y-9, x+7, y+9], fill=color)
     elif icon_name == "next":
         draw.rectangle([x+10, y-8, x+14, y+8], fill=color)
-        draw.polygon([x+10, y, x+2, y-8, x+2, y+8], fill=color)
-        draw.polygon([x+2, y, x-6, y-8, x-6, y+8], fill=color)
+        draw.polygon([x+8, y, x-2, y-8, x-2, y+8], fill=color)
+        draw.polygon([x-2, y, x-12, y-8, x-12, y+8], fill=color)
     elif icon_name == "heart":
-        draw.ellipse([x-10, y-10, x, y+2], fill=color)
-        draw.ellipse([x, y-10, x+10, y+2], fill=color)
-        draw.polygon([x-9, y-2, x+9, y-2, x, y+10], fill=color)
+        draw.ellipse([x-11, y-10, x, y+1], fill=color)
+        draw.ellipse([x, y-10, x+11, y+1], fill=color)
+        draw.polygon([x-10, y-1, x+10, y-1, x, y+10], fill=color)
     elif icon_name == "headphone":
-        draw.arc([x-12, y-12, x+12, y+4], 180, 0, fill=color, width=3)
-        draw.rounded_rectangle([x-14, y-2, x-7, y+10], radius=3, fill=color)
-        draw.rounded_rectangle([x+7, y-2, x+14, y+10], radius=3, fill=color)
+        draw.arc([x-13, y-12, x+13, y+4], 180, 0, fill=color, width=w)
+        draw.rounded_rectangle([x-15, y-2, x-7, y+10], radius=3, fill=color)
+        draw.rounded_rectangle([x+7, y-2, x+15, y+10], radius=3, fill=color)
 
 async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     output = f"cache/{videoid}.png"
@@ -165,56 +158,60 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     except Exception:
         song_img = Image.new("RGBA", (1280, 720), (28, 10, 5))
 
+    # Clean Blurred Background (Removed extra texts)
     bg = song_img.resize((W, H), Image.LANCZOS).convert("RGB")
-    bg = bg.filter(ImageFilter.GaussianBlur(55))
-    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 130))
+    bg = bg.filter(ImageFilter.GaussianBlur(65))
+    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 110))
     bg = Image.alpha_composite(bg.convert("RGBA"), dark_overlay)
     base = bg.convert("RGBA")
 
-    # Layout Coordinates setup
-    card_box = [180, 130, 1100, 590]
+    # Perfect Coordinates Match
+    card_box = [160, 140, 1120, 580]
     img_size = 380
-    img_x, img_y = 220, 170
-    text_x = 640
+    img_x, img_y = 190, 170
+    text_x = 610
+    bar_w = 460
     
     gradient = _get_gradient(W, H)
-    base = _draw_neon_card(base, card_box, radius=30, gradient=gradient)
-
-    sq_img = _crop_center_square(song_img)
-    base = _paste_rounded(base, sq_img, img_x, img_y, img_size, r=25)
     
+    # Outer Card
+    base = _draw_neon_card(base, card_box, radius=40, gradient=gradient)
+
+    # Square Thumbnail
+    sq_img = _crop_center_square(song_img)
+    base = _paste_rounded(base, sq_img, img_x, img_y, img_size, r=30)
+    
+    # Inner Thumbnail Glow
     img_box = [img_x, img_y, img_x + img_size, img_y + img_size]
-    base = _draw_neon_card(base, img_box, radius=25, gradient=gradient, stroke_width=3, glow_spread=10, is_image=True)
+    base = _draw_neon_card(base, img_box, radius=30, gradient=gradient, stroke_width=3, glow_spread=12, is_image=True)
 
     draw = ImageDraw.Draw(base)
     
     # Fonts
-    f_tit = _get_font(FONT_BOLD, 46)
-    f_sub = _get_font(FONT_NORMAL, 30)
+    f_tit = _get_font(FONT_BOLD, 44)
+    f_sub = _get_font(FONT_NORMAL, 28)
     f_time = _get_font(FONT_BOLD, 22)
-    f_bg = _get_font(FONT_BOLD, 55)
 
-    # Texts
-    title_text = _truncate(draw, title.upper(), f_tit, 420)
-    artist_text = _truncate(draw, channel, f_sub, 420)
+    # Title & Subtitle
+    title_text = _truncate(draw, title.upper(), f_tit, 460)
+    artist_text = _truncate(draw, channel, f_sub, 460)
     
-    draw.text((text_x, 230), title_text, font=f_tit, fill=TEXT_WHITE)
-    draw.text((text_x, 300), artist_text, font=f_sub, fill=TEXT_GRAY)
+    draw.text((text_x, 240), title_text, font=f_tit, fill=TEXT_WHITE)
+    draw.text((text_x, 310), artist_text, font=f_sub, fill=TEXT_GRAY)
 
     # Progress Bar
-    bar_y = 440
-    bar_w = 420
-    draw.rounded_rectangle([(text_x, bar_y), (text_x + bar_w, bar_y + 6)], radius=3, fill=(180, 180, 180, 120))
+    bar_y = 450
+    draw.rounded_rectangle([(text_x, bar_y), (text_x + bar_w, bar_y + 6)], radius=3, fill=(200, 200, 200, 140))
     prog_w = int(bar_w * 0.35) 
-    draw.rounded_rectangle([(text_x, bar_y), (text_x + prog_w, bar_y + 6)], radius=3, fill=(150, 204, 57, 255))
+    draw.rounded_rectangle([(text_x, bar_y), (text_x + prog_w, bar_y + 6)], radius=3, fill=(157, 205, 59, 255))
     draw.ellipse([(text_x + prog_w - 7, bar_y - 4), (text_x + prog_w + 7, bar_y + 10)], fill=(255, 255, 255, 255))
 
-    # Time
-    draw.text((text_x, 465), "01:37", font=f_time, fill=TEXT_WHITE, anchor="ls")
-    draw.text((text_x + bar_w, 465), duration, font=f_time, fill=TEXT_WHITE, anchor="rs")
+    # Timestamps
+    draw.text((text_x, 475), "01:37", font=f_time, fill=TEXT_WHITE, anchor="ls")
+    draw.text((text_x + bar_w, 475), duration, font=f_time, fill=TEXT_WHITE, anchor="rs")
 
-    # CUSTOM ICONS (Drawn via code, no font needed!)
-    icon_y = 510
+    # Perfectly Aligned Vector Icons
+    icon_y = 525
     icons = [
         ("shuffle", (37, 180, 122)),
         ("repeat", (211, 150, 38)),
@@ -225,16 +222,10 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
         ("headphone", (255, 255, 255))
     ]
     
-    spacing = bar_w // (len(icons) - 1)
+    spacing = bar_w / (len(icons) - 1)
     for i, (name, color) in enumerate(icons):
-        ix = text_x + (i * spacing)
-        _draw_icon(draw, name, ix, icon_y, color)
-
-    # Background Texts (Blurred look)
-    draw.text((120, 600), "25 M+", font=f_bg, fill=(255, 255, 255, 60))
-    draw.text((120, 660), "VIEWS", font=f_bg, fill=(255, 255, 255, 60))
-    draw.text((W - 120, 600), "OFFICIAL", font=f_bg, fill=(255, 255, 255, 60), anchor="ra")
-    draw.text((W - 120, 660), "VIDEO", font=f_bg, fill=(255, 255, 255, 60), anchor="ra")
+        ix = int(text_x + (i * spacing))
+        _draw_vector_icon(draw, name, ix, icon_y, color)
 
     base = base.convert("RGB")
     base.save(output, "PNG", optimize=True)
