@@ -9,7 +9,6 @@ from functools import lru_cache
 from typing import Tuple
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 ASSETS      = os.path.join(BASE_DIR, "..", "assets")
 FONT_BOLD   = os.path.join(ASSETS, "f.ttf")
@@ -18,42 +17,26 @@ FONT_NORMAL = os.path.join(ASSETS, "cfont.ttf")
 def clean_username(name: str) -> str:
     import unicodedata
     import re
-
     if not name:
         return "IstkharUser"
-
-    # normalize
     name = unicodedata.normalize("NFKC", name)
-
-    # fancy → normal
     decoded = unidecode(name)
-
-    # 🔥 agar readable hai to use kar
     if re.match(r'^[A-Za-z0-9 _.-]{3,}$', decoded):
         return decoded.strip()
-
-    # 🔥 warna soft clean
     cleaned = re.sub(r'[^A-Za-z0-9 ]+', ' ', decoded)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-
     if len(cleaned) < 3:
         return "AxiomUser"
-
     return cleaned
-    
-# 🔥 fallback fonts (ONLY for username)
-FONT_FALLBACKS = []
 
+FONT_FALLBACKS = []
 for file in os.listdir(ASSETS):
     if file.lower().endswith((".ttf", ".otf")):
         FONT_FALLBACKS.append(os.path.join(ASSETS, file))
 
-# 🔥 emoji font sabse upar
 emoji_font = os.path.join(ASSETS, "seguiemj.ttf")
 if os.path.exists(emoji_font):
     FONT_FALLBACKS.insert(0, emoji_font)
-
-# last fallback
 FONT_FALLBACKS.append(FONT_NORMAL)
 
 @lru_cache(maxsize=10)
@@ -64,27 +47,19 @@ def _get_fallback_fonts(size: int):
             fonts.append(ImageFont.truetype(path, size))
         except:
             continue
-
     if not fonts:
         fonts.append(ImageFont.load_default())
-
     return fonts
 
 # ═══════════════════════════════════════════════════════════════════
-# THUMBNAIL GENERATOR - VERSION 4.1 (Performance Edition)
-# Fixes: removed unused numpy import, added in-memory cache guard
+# THUMBNAIL GENERATOR - VERSION 5.0 (Glassmorphism & Neon Edition)
 # ═══════════════════════════════════════════════════════════════════
 
 W, H = 1280, 720
-BG_COLOR   = (45,  60,  65)
 TEXT_WHITE = (255, 255, 255)
-TEXT_GRAY  = (175, 182, 188)
-REQ_COLOR = (255, 215, 0)  
+TEXT_GRAY  = (200, 200, 200)
 
-# In-memory set: tracks videoids already generated this session
-# Prevents regenerating same thumb if cache/ file was wiped by Heroku
-_thumb_memory: dict = {}  # videoid -> output_path
-
+_thumb_memory: dict = {}
 
 @lru_cache(maxsize=4)
 def _get_font(path: str, size: int) -> ImageFont.FreeTypeFont:
@@ -93,186 +68,92 @@ def _get_font(path: str, size: int) -> ImageFont.FreeTypeFont:
     except Exception:
         return ImageFont.load_default()
 
+def _get_gradient(w, h):
+    """Creates a horizontal cyan-green-pink gradient map."""
+    gradient = Image.new('RGBA', (w, h))
+    draw = ImageDraw.Draw(gradient)
+    for x in range(w):
+        ratio = x / w
+        if ratio < 0.45:
+            # Cyan to Greenish-yellow
+            r1 = ratio / 0.45
+            r = int(60 + (160 - 60) * r1)
+            g = int(180 + (230 - 180) * r1)
+            b = int(240 + (80 - 240) * r1)
+        else:
+            # Greenish-yellow to Pink/Purple
+            r1 = (ratio - 0.45) / 0.55
+            r = int(160 + (240 - 160) * r1)
+            g = int(230 + (100 - 230) * r1)
+            b = int(80 + (160 - 80) * r1)
+        draw.line([(x, 0), (x, h)], fill=(r, g, b, 255))
+    return gradient
 
-def _random_palette():
-    h = random.random()
+def _draw_neon_card(base, box, radius, gradient, stroke_width=3, glow_spread=15, is_image=False):
+    """Draws a card/border with a glowing neon gradient."""
+    # Dark transparent background for main card
+    if not is_image:
+        card_bg = Image.new('RGBA', base.size, (0, 0, 0, 0))
+        draw_bg = ImageDraw.Draw(card_bg)
+        draw_bg.rounded_rectangle(box, radius=radius, fill=(20, 20, 20, 140))
+        base = Image.alpha_composite(base.convert('RGBA'), card_bg)
 
-    # avoid muddy brown/yuck zone
-    if 0.08 < h < 0.16:
-        h += 0.15
-    if 0.45 < h < 0.52:
-        h += 0.08
+    # Outer Glow layer
+    glow_mask = Image.new('L', base.size, 0)
+    glow_draw = ImageDraw.Draw(glow_mask)
+    glow_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width + 4)
+    glow_mask = glow_mask.filter(ImageFilter.GaussianBlur(glow_spread))
+    
+    glow_layer = Image.new('RGBA', base.size, (0, 0, 0, 0))
+    glow_layer.paste(gradient, mask=glow_mask)
 
-    h %= 1.0
+    # Solid Stroke layer
+    border_mask = Image.new('L', base.size, 0)
+    border_draw = ImageDraw.Draw(border_mask)
+    border_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width)
+    
+    border_layer = Image.new('RGBA', base.size, (0, 0, 0, 0))
+    border_layer.paste(gradient, mask=border_mask)
 
-    s = random.uniform(0.75, 1.0)
-    v = random.uniform(0.8, 1.0)
-
-    base = tuple(
-        int(x * 255)
-        for x in colorsys.hsv_to_rgb(h, s, v)
-    )
-
-    light = tuple(
-        int(x * 255)
-        for x in colorsys.hsv_to_rgb(
-            h,
-            random.uniform(0.25, 0.5),
-            1.0
-        )
-    )
-
-    dark = tuple(
-        int(x * 255)
-        for x in colorsys.hsv_to_rgb(
-            h,
-            1.0,
-            random.uniform(0.18, 0.35)
-        )
-    )
-
-    return base, light, dark
-
-
-def _make_bg_v4() -> Image.Image:
-    base = Image.new("RGB", (W, H), BG_COLOR)
-    draw = ImageDraw.Draw(base, "RGBA")
-    for y in range(H):
-        ratio = y / H
-        draw.line([(0, y), (W, y)], fill=(0, 0, 0, int(45 * ratio)))
-    vignette = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    vd = ImageDraw.Draw(vignette)
-    for i in range(160, 0, -5):
-        alpha = int(130 * (1 - i / 160))
-        vd.rectangle([0, 0, W, H], outline=(0, 0, 0, alpha), width=i)
-    base.paste(vignette.filter(ImageFilter.GaussianBlur(45)), (0, 0), vignette)
+    # Combine
+    base = Image.alpha_composite(base.convert('RGBA'), glow_layer)
+    base = Image.alpha_composite(base, border_layer)
     return base
 
+def _crop_center_square(img):
+    w, h = img.size
+    m = min(w, h)
+    left = (w - m) / 2
+    top = (h - m) / 2
+    right = (w + m) / 2
+    bottom = (h + m) / 2
+    return img.crop((left, top, right, bottom))
 
-def _draw_card_border_v4(base: Image.Image, x1, y1, x2, y2, r=28, c_base=(202,215,221), c_light=(225,235,240), c_dark=(140,155,162)) -> Image.Image:
-    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    for i in range(38, 0, -1):
-        alpha = int(95 * (1 - i / 38) ** 1.4)
-        d.rounded_rectangle([x1 - i, y1 - i, x2 + i, y2 + i], radius=r + i, fill=(255, 255, 255, alpha))
-    for i in range(18, 0, -1):
-        d.rounded_rectangle(
-            [x1 - i, y1 - i, x2 + i, y2 + i],
-            radius=r + i,
-            fill=(*c_base, int(75 * (1 - i / 18)))
-        )
-    d.rounded_rectangle([x1 + 10, y1 + 10, x2 - 10, y2 - 10], radius=max(r - 10, 4), fill=(18, 24, 26, 255))
-    for offset, color, bw in [(0, (*c_dark, 255), 5), (2, (*c_base, 255), 3), (4, (255, 255, 255, 180), 2)]:
-        d.rounded_rectangle([x1 + offset, y1 + offset, x2 - offset, y2 - offset], radius=max(r - offset, 4), outline=color, width=bw)
-    return Image.alpha_composite(base.convert("RGBA"), layer).convert("RGB")
-
-
-def _draw_art_shadow(base: Image.Image, x, y, w, h, r=18, c_base=(202,215,221)) -> Image.Image:
-    shadow_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(shadow_layer)
-
-    off_x, off_y = 10, 14
-
-    # deep black shadow
-    for i in range(48, 0, -1):
-        alpha = int(230 * (1 - i / 48) ** 1.3)
-        sd.rounded_rectangle(
-            [x+off_x-i, y+off_y-i, x+w+off_x+i, y+h+off_y+i],
-            radius=r+i,
-            fill=(0, 0, 0, alpha)
-        )
-
-    # outer glow
-    for i in range(22, 0, -1):
-        alpha = int(120 * (1 - i / 22) ** 1.6)
-        sd.rounded_rectangle(
-            [x-i, y-i, x+w+i, y+h+i],
-            radius=r+i,
-            fill=(*c_base, alpha)
-        )
-
-    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(22))
-    return Image.alpha_composite(base.convert("RGBA"), shadow_layer).convert("RGB")
-
-
-def _paste_rounded(base: Image.Image, img: Image.Image, x, y, w, h, r=18) -> Image.Image:
-    img = img.resize((w, h), Image.LANCZOS).convert("RGBA")
-    mask = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([(0, 0), (w - 1, h - 1)], radius=r, fill=255)
+def _paste_rounded(base, img, x, y, size, r=20):
+    img = img.resize((size, size), Image.LANCZOS).convert("RGBA")
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([(0, 0), (size - 1, size - 1)], radius=r, fill=255)
     img.putalpha(mask)
-    base_r = base.convert("RGBA")
-    base_r.paste(img, (x, y), img)
-    return base_r.convert("RGB")
-
-
-def _draw_bar(base: Image.Image, bx, by_top, by_bot, progress: float = 0.06,
-              c_base=(202,215,221), c_light=(225,235,240), c_dark=(140,155,162)) -> Image.Image:
-
-    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-
-    bw = 8
-    knob_y = by_top + int((by_bot - by_top) * progress)
-    kr = 14
-
-    # inactive line
-    d.rounded_rectangle(
-        [(bx - bw//2, by_top), (bx + bw//2, by_bot)],
-        radius=4,
-        fill=(90, 95, 110, 255)
-    )
-
-    # active line
-    if knob_y > by_top:
-        d.rounded_rectangle(
-            [(bx - bw//2, by_top), (bx + bw//2, knob_y)],
-            radius=4,
-            fill=(*c_base, 255)
-        )
-
-    # glow rings
-    d.ellipse(
-        [(bx - kr - 16, knob_y - kr - 16),
-         (bx + kr + 16, knob_y + kr + 16)],
-        fill=(*c_base, 35)
-    )
-
-    d.ellipse(
-        [(bx - kr - 9, knob_y - kr - 9),
-         (bx + kr + 9, knob_y + kr + 9)],
-        fill=(*c_base, 70)
-    )
-
-    # main knob
-    d.ellipse(
-        [(bx - kr, knob_y - kr),
-         (bx + kr, knob_y + kr)],
-        fill=(*c_base, 255)
-    )
-
-    return Image.alpha_composite(base.convert("RGBA"), layer).convert("RGB")
-
+    base.paste(img, (x, y), img)
+    return base
 
 def _truncate(draw, text, font, max_w):
     if draw.textlength(text, font=font) <= max_w: return text
     while text and draw.textlength(text + "…", font=font) > max_w: text = text[:-1]
     return text + "…"
 
-
 async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     output = f"cache/{videoid}.png"
     cache  = f"cache/thumb{videoid}.jpg"
     os.makedirs("cache", exist_ok=True)
 
-    # 1) Already generated this session (in-memory, survives even if file missing)
-    # always regenerate thumbnail (fresh random color every time)
     if os.path.exists(output):
         try:
             os.remove(output)
         except:
             pass
 
-    # 3) Fetch metadata
+    # Fetch metadata
     url = f"https://www.youtube.com/watch?v={videoid}"
     try:
         from py_yt import VideosSearch
@@ -280,13 +161,14 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
         title     = re.sub(r"[\x00-\x1f\x7f]", "", data.get("title", "Unknown")).strip()
         duration  = data.get("duration", "00:00") or "00:00"
         thumb_url = data.get("thumbnails", [{}])[-1].get("url", "").split("?")[0]
-        v_raw     = str(data.get("viewCount", {}).get("short", "N/A"))
-        vc        = re.sub(r'\s*views?\s*', '', v_raw, flags=re.IGNORECASE).strip()
-        views, channel = f"{vc} views", data.get("channel", {}).get("name", "Unknown")
+        channel   = data.get("channel", {}).get("name", "Unknown")
     except Exception:
-        return "https://o.uguu.se/snWhWXPT.jpg"
+        title = "Unknown Track"
+        duration = "00:00"
+        channel = "Unknown Artist"
+        thumb_url = "https://o.uguu.se/snWhWXPT.jpg"
 
-    # 4) Download thumbnail image
+    # Download thumbnail image
     try:
         async with aiohttp.ClientSession() as sess:
             async with sess.get(thumb_url, timeout=aiohttp.ClientTimeout(total=10)) as r:
@@ -294,254 +176,103 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
                     await f.write(await r.read())
         song_img = Image.open(cache).convert("RGBA")
     except Exception:
-        song_img = Image.new("RGBA", (777, 458), (28, 10, 5))
+        song_img = Image.new("RGBA", (1280, 720), (28, 10, 5))
 
-    # 5) Compose
-    c_base, c_light, c_dark = _random_palette()
-    
-    # thumbnail se base color mood
+    # Compose Background (Heavily Blurred)
     bg = song_img.resize((W, H), Image.LANCZOS).convert("RGB")
-    bg = bg.filter(ImageFilter.GaussianBlur(55))
+    bg = bg.filter(ImageFilter.GaussianBlur(60))
     
-    # dark cinematic overlay
-    dark_overlay = Image.new("RGBA", (W, H), (3, 5, 12, 210))
+    # Darken background slightly to make card pop
+    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 100))
     bg = Image.alpha_composite(bg.convert("RGBA"), dark_overlay)
-    
-    # ambient gradient blobs
-    # universe / nebula style background glow
-    bg = Image.new("RGBA", (W, H), (4, 5, 18, 255))
-    
-    nebula = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ndraw = ImageDraw.Draw(nebula)
-    
-    # nebula blobs
-    for _ in range(8):
-        color = (
-            random.randint(40, 255),
-            random.randint(40, 255),
-            random.randint(40, 255),
-            random.randint(30, 70)
-        )
-    
-        x = random.randint(-200, W)
-        y = random.randint(-200, H)
-        size = random.randint(250, 600)
-    
-        ndraw.ellipse(
-            (x, y, x + size, y + size),
-            fill=color
-        )
-    
-    nebula = nebula.filter(ImageFilter.GaussianBlur(130))
-    bg = Image.alpha_composite(bg, nebula)
-    
-    # subtle vignette
-    vignette = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    vd = ImageDraw.Draw(vignette)
-    
-    for i in range(220, 0, -8):
-        alpha = int(190 * (1 - i / 220))
-        vd.rectangle(
-            [0, 0, W, H],
-            outline=(0, 0, 0, alpha),
-            width=i
-        )
-    
-    vignette = vignette.filter(ImageFilter.GaussianBlur(75))
-    bg = Image.alpha_composite(bg, vignette)
-    
-    # soft noise texture
-    stars = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    sdraw = ImageDraw.Draw(stars)
-    
-    for _ in range(2500):
-        x = random.randint(0, W)
-        y = random.randint(0, H)
-    
-        size = random.randint(1, 3)
-        alpha = random.randint(80, 220)
-    
-        sdraw.ellipse(
-            (x, y, x + size, y + size),
-            fill=(255, 255, 255, alpha)
-        )
-    
-    stars = stars.filter(ImageFilter.GaussianBlur(0.4))
-    bg = Image.alpha_composite(bg, stars)
+    base = bg.convert("RGBA")
 
-    planet = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    pdraw = ImageDraw.Draw(planet)
+    # Layout Coordinates
+    card_box = [200, 150, 1080, 570]
+    img_size = 360
+    img_x, img_y = 240, 180
     
-    planet_x = random.randint(70, 1150)
-    planet_y = random.randint(60, 550)
-    r = random.randint(35, 70)
+    gradient = _get_gradient(W, H)
+
+    # Draw Main Card
+    base = _draw_neon_card(base, card_box, radius=30, gradient=gradient)
+
+    # Paste Square Thumbnail
+    sq_img = _crop_center_square(song_img)
+    base = _paste_rounded(base, sq_img, img_x, img_y, img_size, r=25)
     
-    planet_color = (
-        random.randint(80, 255),
-        random.randint(80, 255),
-        random.randint(80, 255),
-        120
-    )
-    
-    pdraw.ellipse(
-        (planet_x-r, planet_y-r, planet_x+r, planet_y+r),
-        fill=planet_color
-    )
-    
-    planet = planet.filter(ImageFilter.GaussianBlur(8))
-    bg = Image.alpha_composite(bg, planet)
-        
-    base = bg.convert("RGB")
-    
-    # premium card
-    base = _draw_card_border_v4(
-        base,
-        310, 65, 1060, 500,
-        30,
-        c_base, c_light, c_dark
-    )
-    
-    base = _draw_art_shadow(base, 322, 77, 727, 413, 18, c_base)
-    base = _paste_rounded(base, song_img, 322, 77, 727, 413, 18)
-    
-    # subtle glass effect (optional)
-    glass = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glass)
-    
-    gd.rounded_rectangle(
-        [325, 80, 1045, 485],
-        radius=22,
-        fill=(255, 255, 255, 8)
-    )
-    
-    glass = glass.filter(ImageFilter.GaussianBlur(4))
-    base = Image.alpha_composite(base.convert("RGBA"), glass).convert("RGB")
-    
-    # progress bar
-    base = _draw_bar(base, 105, 93, 556, 0.23, c_base, c_light, c_dark)
+    # Draw Thumbnail Border (Neon)
+    img_box = [img_x, img_y, img_x + img_size, img_y + img_size]
+    base = _draw_neon_card(base, img_box, radius=25, gradient=gradient, stroke_width=3, glow_spread=10, is_image=True)
+
     draw = ImageDraw.Draw(base)
-    f_t   = _get_font(FONT_BOLD,   30)
-    f_tit = _get_font(FONT_BOLD,   44)
-    f_s   = _get_font(FONT_NORMAL, 30)
-    f_wm  = _get_font(FONT_BOLD,   24)
-
-    draw.text((105, 44),  "00:17",                                                  font=f_t,   fill=c_base,     anchor="mm")
-    draw.text((105, 598), duration,                                                  font=f_t,   fill=c_base,     anchor="mm")
-    title_text = _truncate(draw, title, f_tit, 800)
     
-    # shadow
-    # glow layers
-    # title glow
-    for i in range(8, 0, -2):
-        draw.text(
-            (685, 567),
-            title_text,
-            font=f_tit,
-            fill=(*c_base, 28),
-            anchor="mm"
-        )
+    # Fonts
+    f_tit = _get_font(FONT_BOLD, 42)
+    f_sub = _get_font(FONT_BOLD, 28)
+    f_time = _get_font(FONT_BOLD, 20)
+    f_icon = _get_font(emoji_font, 32) if os.path.exists(emoji_font) else _get_font(FONT_NORMAL, 32)
+
+    # Text Placement
+    text_x = 640
+    title_text = _truncate(draw, title.upper(), f_tit, 400)
+    artist_text = _truncate(draw, channel, f_sub, 400)
     
-    # shadow
-    draw.text(
-        (689, 571),
-        title_text,
-        font=f_tit,
-        fill=(0, 0, 0),
-        anchor="mm"
-    )
+    draw.text((text_x, 240), title_text, font=f_tit, fill=TEXT_WHITE)
+    draw.text((text_x, 305), artist_text, font=f_sub, fill=TEXT_GRAY)
+
+    # Progress Bar
+    bar_y = 420
+    bar_w = 380
+    draw.rounded_rectangle([(text_x, bar_y), (text_x + bar_w, bar_y + 6)], radius=3, fill=(180, 180, 180, 180))
     
-    # main title
-    draw.text(
-        (685, 567),
-        title_text,
-        font=f_tit,
-        fill=TEXT_WHITE,
-        anchor="mm"
-    )
+    # Active Progress (Greenish)
+    prog_w = int(bar_w * 0.35) # 35% progress randomly set for visual
+    draw.rounded_rectangle([(text_x, bar_y), (text_x + prog_w, bar_y + 6)], radius=3, fill=(150, 204, 57, 255))
     
-    # main title
-    draw.text(
-        (685, 567),
-        title_text,
-        font=f_tit,
-        fill=TEXT_WHITE,
-        anchor="mm"
-    )
-    meta_text = _truncate(draw, f"{channel}  |  {views}", f_s, 840)
+    # Progress Knob
+    draw.ellipse([(text_x + prog_w - 6, bar_y - 3), (text_x + prog_w + 6, bar_y + 9)], fill=(255, 255, 255, 255))
+
+    # Time Text
+    draw.text((text_x, 445), "01:37", font=f_time, fill=TEXT_WHITE, anchor="ls")
+    draw.text((text_x + bar_w, 445), duration, font=f_time, fill=TEXT_WHITE, anchor="rs")
+
+    # Control Icons (using text/unicode as fallback for images)
+    # Colors matching the reference image: Shuffle(Green), Repeat(Orange), Heart(Red)
+    icon_y = 485
+    icons_data = [
+        ("🔀", (37, 180, 122)),  # Shuffle - Green
+        ("🔁", (211, 150, 38)),  # Repeat - Orange
+        ("⏮", (255, 255, 255)), # Prev - White
+        ("⏸", (255, 255, 255)), # Pause - White
+        ("⏭", (255, 255, 255)), # Next - White
+        ("❤️", (216, 55, 55)),   # Heart - Red
+        ("🎧", (255, 255, 255))  # Headphone - White
+    ]
     
-    draw.text(
-        (687, 623),
-        meta_text,
-        font=f_s,
-        fill=(0, 0, 0),
-        anchor="mm"
-    )
+    spacing = bar_w // (len(icons_data) - 1)
+    for i, (icon_char, color) in enumerate(icons_data):
+        ix = text_x + (i * spacing)
+        # Drop shadow for icons
+        draw.text((ix+1, icon_y+1), icon_char, font=f_icon, fill=(0,0,0,100), anchor="ms")
+        draw.text((ix, icon_y), icon_char, font=f_icon, fill=color, anchor="ms")
+
+    # Add background views/video tag (blurred effect in reference)
+    f_bg = _get_font(FONT_BOLD, 55)
+    draw.text((100, 600), "25 M+", font=f_bg, fill=(255, 255, 255, 80))
+    draw.text((100, 660), "VIEWS", font=f_bg, fill=(255, 255, 255, 80))
     
-    draw.text(
-        (685, 620),
-        meta_text,
-        font=f_s,
-        fill=TEXT_GRAY,
-        anchor="mm"
-    )
-    safe_name = clean_username(user_name)
+    draw.text((W - 100, 600), "OFFICIAL", font=f_bg, fill=(255, 255, 255, 80), anchor="ra")
+    draw.text((W - 100, 660), "VIDEO", font=f_bg, fill=(255, 255, 255, 80), anchor="ra")
 
-    print(f"[DEBUG] user_name = {user_name}")
-
-    # normalize dashes
-    safe_name = safe_name.replace("–", "-").replace("—", "-").strip()
-
-    if safe_name.lower() in ["none", "", "-", "null"]:
-        safe_name = "Unknown"
-
-    # 🔥 custom color control (yaha change karega tu)
-    NAME_COLOR = (255, 255, 255)   # white
-    # NAME_COLOR = (255, 215, 0)   # yellow karna ho to ye use kar
-
-    # fonts
-    f_req_label = _get_font(FONT_BOLD, 30)     # "Requested by:"
-    f_req = _get_font(FONT_BOLD, 30)   # username
-
-    label_text = "Requested by | "
-    name_text  = safe_name
-
-    # width calculate (same font)
-    label_w = draw.textlength(label_text, font=f_req)
-    name_w  = draw.textlength(name_text, font=f_req)
-
-    total_w = label_w + name_w
-
-    center_x = W // 2
-    start_x = center_x - total_w // 2
-    y = 680
-
-    # label
-    draw.text(
-        (start_x, y),
-        label_text,
-        font=f_req,
-        fill=TEXT_WHITE,
-        anchor="lm"
-    )
-
-    # name (same font)
-    draw.text(
-        (start_x + label_w, y),
-        name_text,
-        font=f_req,
-        fill=c_base,
-        anchor="lm"
-    )
-    draw.text((1255, 45), "Dev | ALEXX",                                          font=f_wm,  fill=TEXT_WHITE, anchor="rd")
-
+    # Save
+    base = base.convert("RGB")
     base.save(output, "PNG", optimize=True)
 
-    # Cleanup temp download
     try:
-        if os.path.exists(cache):
-            os.remove(cache)
-    except Exception:
-        pass
+        if os.path.exists(cache): os.remove(cache)
+    except: pass
 
     _thumb_memory[videoid] = output
     return output
+
