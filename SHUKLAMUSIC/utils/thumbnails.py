@@ -13,7 +13,7 @@ FONT_BOLD   = os.path.join(ASSETS, "f.ttf")
 FONT_NORMAL = os.path.join(ASSETS, "cfont.ttf")
 
 # ═══════════════════════════════════════════════════════════════════
-# THUMBNAIL GENERATOR - 100% PERFECT MATCH EDITION
+# THUMBNAIL GENERATOR - 100% PERFECT MATCH (BOLD & BRIGHT BG EDITION)
 # ═══════════════════════════════════════════════════════════════════
 
 W, H = 1280, 720
@@ -36,13 +36,13 @@ def _get_gradient(w, h):
     for x in range(w):
         ratio = x / w
         if ratio < 0.5:
-            # Cyan to Green
+            # Cyan to Greenish
             rat = ratio / 0.5
             r = int(60 + (150 - 60) * rat)
             g = int(180 + (230 - 180) * rat)
             b = int(240 + (80 - 240) * rat)
         else:
-            # Green to Pink
+            # Greenish to Pink
             rat = (ratio - 0.5) / 0.5
             r = int(150 + (240 - 150) * rat)
             g = int(230 + (100 - 230) * rat)
@@ -50,23 +50,24 @@ def _get_gradient(w, h):
         draw.line([(x, 0), (x, h)], fill=(r, g, b, 255))
     return gradient
 
-def _draw_neon_card(base, box, radius, gradient, stroke_width=3, glow_spread=25, is_image=False):
-    # Background glass for main card
+def _draw_neon_card(base, box, radius, gradient, stroke_width=6, glow_spread=35, is_image=False):
+    # Background glass for main card - lighter to show the blurred background properly
     if not is_image:
         card_bg = Image.new('RGBA', base.size, (0, 0, 0, 0))
         draw_bg = ImageDraw.Draw(card_bg)
-        draw_bg.rounded_rectangle(box, radius=radius, fill=(22, 22, 22, 140))
+        # 100 alpha for transparency just like the reference
+        draw_bg.rounded_rectangle(box, radius=radius, fill=(20, 20, 20, 110)) 
         base = Image.alpha_composite(base.convert('RGBA'), card_bg)
 
-    # Glow Mask
+    # Thick Glow Mask (For that bold look)
     glow_mask = Image.new('L', base.size, 0)
     glow_draw = ImageDraw.Draw(glow_mask)
-    glow_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width + 4)
+    glow_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width + 8)
     glow_mask = glow_mask.filter(ImageFilter.GaussianBlur(glow_spread))
     glow_layer = Image.new('RGBA', base.size, (0, 0, 0, 0))
     glow_layer.paste(gradient, mask=glow_mask)
 
-    # Solid Stroke
+    # Solid Bold Stroke
     border_mask = Image.new('L', base.size, 0)
     border_draw = ImageDraw.Draw(border_mask)
     border_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width)
@@ -158,14 +159,25 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     except Exception:
         song_img = Image.new("RGBA", (1280, 720), (28, 10, 5))
 
-    # Clean Blurred Background (Removed extra texts)
-    bg = song_img.resize((W, H), Image.LANCZOS).convert("RGB")
-    bg = bg.filter(ImageFilter.GaussianBlur(65))
-    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 110))
-    bg = Image.alpha_composite(bg.convert("RGBA"), dark_overlay)
-    base = bg.convert("RGBA")
+    # --- BG GENERATION (Bright & Blurred with texts) ---
+    bg = song_img.resize((W, H), Image.LANCZOS).convert("RGBA")
+    
+    # Adding background texts BEFORE blurring so they blend beautifully
+    f_bg = _get_font(FONT_BOLD, 75)
+    bg_draw = ImageDraw.Draw(bg)
+    bg_draw.text((80, 570), "25 M+", font=f_bg, fill=(255, 255, 255, 200))
+    bg_draw.text((80, 640), "VIEWS", font=f_bg, fill=(255, 255, 255, 200))
+    bg_draw.text((W - 80, 570), "OFFICIAL", font=f_bg, fill=(255, 255, 255, 200), anchor="ra")
+    bg_draw.text((W - 80, 640), "VIDEO", font=f_bg, fill=(255, 255, 255, 200), anchor="ra")
 
-    # Perfect Coordinates Match
+    # Heavy blur so it looks like the reference
+    bg = bg.filter(ImageFilter.GaussianBlur(55))
+    
+    # Very LIGHT dark overlay, NOT heavy, so colors remain vibrant
+    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 70)) 
+    base = Image.alpha_composite(bg, dark_overlay)
+    # ----------------------------------------------------
+
     card_box = [160, 140, 1120, 580]
     img_size = 380
     img_x, img_y = 190, 170
@@ -174,16 +186,16 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     
     gradient = _get_gradient(W, H)
     
-    # Outer Card
-    base = _draw_neon_card(base, card_box, radius=40, gradient=gradient)
+    # BOLD Outer Card
+    base = _draw_neon_card(base, card_box, radius=40, gradient=gradient, stroke_width=5, glow_spread=35)
 
     # Square Thumbnail
     sq_img = _crop_center_square(song_img)
     base = _paste_rounded(base, sq_img, img_x, img_y, img_size, r=30)
     
-    # Inner Thumbnail Glow
+    # BOLD Inner Thumbnail Glow
     img_box = [img_x, img_y, img_x + img_size, img_y + img_size]
-    base = _draw_neon_card(base, img_box, radius=30, gradient=gradient, stroke_width=3, glow_spread=12, is_image=True)
+    base = _draw_neon_card(base, img_box, radius=30, gradient=gradient, stroke_width=4, glow_spread=20, is_image=True)
 
     draw = ImageDraw.Draw(base)
     
@@ -192,7 +204,7 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     f_sub = _get_font(FONT_NORMAL, 28)
     f_time = _get_font(FONT_BOLD, 22)
 
-    # Title & Subtitle
+    # Texts
     title_text = _truncate(draw, title.upper(), f_tit, 460)
     artist_text = _truncate(draw, channel, f_sub, 460)
     
@@ -206,11 +218,11 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     draw.rounded_rectangle([(text_x, bar_y), (text_x + prog_w, bar_y + 6)], radius=3, fill=(157, 205, 59, 255))
     draw.ellipse([(text_x + prog_w - 7, bar_y - 4), (text_x + prog_w + 7, bar_y + 10)], fill=(255, 255, 255, 255))
 
-    # Timestamps
+    # Time
     draw.text((text_x, 475), "01:37", font=f_time, fill=TEXT_WHITE, anchor="ls")
     draw.text((text_x + bar_w, 475), duration, font=f_time, fill=TEXT_WHITE, anchor="rs")
 
-    # Perfectly Aligned Vector Icons
+    # Icons
     icon_y = 525
     icons = [
         ("shuffle", (37, 180, 122)),
@@ -236,4 +248,3 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
 
     _thumb_memory[videoid] = output
     return output
-
