@@ -5,20 +5,20 @@ import aiofiles
 from unidecode import unidecode
 from functools import lru_cache
 from typing import Tuple
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR    = os.path.dirname(os.path.abspath(file))
 ASSETS      = os.path.join(BASE_DIR, "..", "assets")
 FONT_BOLD   = os.path.join(ASSETS, "f.ttf")
 FONT_NORMAL = os.path.join(ASSETS, "cfont.ttf")
 
 # ═══════════════════════════════════════════════════════════════════
-# THUMBNAIL GENERATOR - ULTIMATE PIXEL-PERFECT CLONE
+# THUMBNAIL GENERATOR - 100% PERFECT MATCH (BOLD & BRIGHT BG EDITION)
 # ═══════════════════════════════════════════════════════════════════
 
 W, H = 1280, 720
 TEXT_WHITE = (255, 255, 255)
-TEXT_GRAY  = (190, 195, 200)
+TEXT_GRAY  = (200, 200, 200)
 
 _thumb_memory: dict = {}
 
@@ -36,37 +36,38 @@ def _get_gradient(w, h):
     for x in range(w):
         ratio = x / w
         if ratio < 0.5:
-            # Cyan to Yellow-Green
+            # Cyan to Greenish
             rat = ratio / 0.5
-            r = int(50 + (160 - 50) * rat)
-            g = int(190 + (230 - 190) * rat)
-            b = int(250 + (80 - 250) * rat)
+            r = int(60 + (150 - 60) * rat)
+            g = int(180 + (230 - 180) * rat)
+            b = int(240 + (80 - 240) * rat)
         else:
-            # Yellow-Green to Pinkish-Red
+            # Greenish to Pink
             rat = (ratio - 0.5) / 0.5
-            r = int(160 + (240 - 160) * rat)
-            g = int(230 + (90 - 230) * rat)
-            b = int(80 + (140 - 80) * rat)
+            r = int(150 + (240 - 150) * rat)
+            g = int(230 + (100 - 230) * rat)
+            b = int(80 + (160 - 80) * rat)
         draw.line([(x, 0), (x, h)], fill=(r, g, b, 255))
     return gradient
 
 def _draw_neon_card(base, box, radius, gradient, stroke_width=6, glow_spread=35, is_image=False):
+    # Background glass for main card - lighter to show the blurred background properly
     if not is_image:
         card_bg = Image.new('RGBA', base.size, (0, 0, 0, 0))
         draw_bg = ImageDraw.Draw(card_bg)
-        # Perfect Glass transparency (Alpha 95)
-        draw_bg.rounded_rectangle(box, radius=radius, fill=(18, 18, 20, 95)) 
+        # 100 alpha for transparency just like the reference
+        draw_bg.rounded_rectangle(box, radius=radius, fill=(20, 20, 20, 110)) 
         base = Image.alpha_composite(base.convert('RGBA'), card_bg)
 
-    # Neon Glow
+    # Thick Glow Mask (For that bold look)
     glow_mask = Image.new('L', base.size, 0)
     glow_draw = ImageDraw.Draw(glow_mask)
-    glow_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width + 12)
+    glow_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width + 8)
     glow_mask = glow_mask.filter(ImageFilter.GaussianBlur(glow_spread))
     glow_layer = Image.new('RGBA', base.size, (0, 0, 0, 0))
     glow_layer.paste(gradient, mask=glow_mask)
 
-    # Solid Border
+    # Solid Bold Stroke
     border_mask = Image.new('L', base.size, 0)
     border_draw = ImageDraw.Draw(border_mask)
     border_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width)
@@ -77,18 +78,14 @@ def _draw_neon_card(base, box, radius, gradient, stroke_width=6, glow_spread=35,
     base = Image.alpha_composite(base, border_layer)
     return base
 
-def _get_square_thumb(img, size):
-    # Perfect Center Zoom Crop (Guaranteed 0% Black Bars)
+def _crop_center_square(img):
     w, h = img.size
     m = min(w, h)
-    crop_size = int(m * 0.85) # Zoom in by 15% to cut letterboxes safely
-    left = (w - crop_size) // 2
-    top = (h - crop_size) // 2
-    trimmed = img.crop((left, top, left + crop_size, top + crop_size))
-    return trimmed.resize((size, size), Image.LANCZOS)
+    left, top = (w - m) / 2, (h - m) / 2
+    return img.crop((left, top, left + m, top + m))
 
 def _paste_rounded(base, img, x, y, size, r=25):
-    img = img.convert("RGBA")
+    img = img.resize((size, size), Image.LANCZOS).convert("RGBA")
     mask = Image.new("L", (size, size), 0)
     ImageDraw.Draw(mask).rounded_rectangle([(0, 0), (size - 1, size - 1)], radius=r, fill=255)
     img.putalpha(mask)
@@ -103,7 +100,8 @@ def _truncate(draw, text, font, max_w):
 def _draw_vector_icon(draw, icon_name, x, y, color):
     w = 3
     if icon_name == "shuffle":
-        draw.line([x-12, y-6, x+10, y+6], fill=color, width=w)
+
+draw.line([x-12, y-6, x+10, y+6], fill=color, width=w)
         draw.line([x-12, y+6, x+10, y-6], fill=color, width=w)
         draw.polygon([x+12, y+8, x+5, y+9, x+9, y+2], fill=color)
         draw.polygon([x+12, y-8, x+5, y-9, x+9, y-2], fill=color)
@@ -143,12 +141,7 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     try:
         from py_yt import VideosSearch
         data      = (await VideosSearch(url, limit=1).next())["result"][0]
-        
-        # Clean title perfectly
-        raw_title = data.get("title", "Unknown")
-        safe_title = unidecode(raw_title)
-        title = re.sub(r'[^a-zA-Z0-9\s\-\.\,\(\)\[\]\|&!]', '', safe_title).strip()
-        
+        title     = re.sub(r"[\x00-\x1f\x7f]", "", data.get("title", "Unknown")).strip()
         duration  = data.get("duration", "00:00") or "00:00"
         thumb_url = data.get("thumbnails", [{}])[-1].get("url", "").split("?")[0]
         channel   = data.get("channel", {}).get("name", "Unknown")
@@ -167,28 +160,25 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     except Exception:
         song_img = Image.new("RGBA", (1280, 720), (28, 10, 5))
 
-    # --- BG GENERATION ---
-    bg = ImageOps.fit(song_img, (W, H), Image.LANCZOS).convert("RGBA")
-    bg = bg.filter(ImageFilter.GaussianBlur(35)) # Optimized Blur
+    # --- BG GENERATION (Bright & Blurred with texts) ---
+    bg = song_img.resize((W, H), Image.LANCZOS).convert("RGBA")
     
-    # Dark overlay to make everything pop
-    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 100)) 
-    bg = Image.alpha_composite(bg, dark_overlay)
-
-    # Bright Background Text Layer
-    txt_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    txt_draw = ImageDraw.Draw(txt_layer)
+    # Adding background texts BEFORE blurring so they blend beautifully
     f_bg = _get_font(FONT_BOLD, 75)
-    
-    txt_draw.text((80, 560), "25 M+", font=f_bg, fill=(255, 255, 255, 220))
-    txt_draw.text((80, 630), "VIEWS", font=f_bg, fill=(255, 255, 255, 220))
-    txt_draw.text((W - 80, 560), "OFFICIAL", font=f_bg, fill=(255, 255, 255, 220), anchor="ra")
-    txt_draw.text((W - 80, 630), "VIDEO", font=f_bg, fill=(255, 255, 255, 220), anchor="ra")
-    
-    txt_layer = txt_layer.filter(ImageFilter.GaussianBlur(3))
-    base = Image.alpha_composite(bg, txt_layer)
+    bg_draw = ImageDraw.Draw(bg)
+    bg_draw.text((80, 570), "25 M+", font=f_bg, fill=(255, 255, 255, 200))
+    bg_draw.text((80, 640), "VIEWS", font=f_bg, fill=(255, 255, 255, 200))
+    bg_draw.text((W - 80, 570), "OFFICIAL", font=f_bg, fill=(255, 255, 255, 200), anchor="ra")
+    bg_draw.text((W - 80, 640), "VIDEO", font=f_bg, fill=(255, 255, 255, 200), anchor="ra")
 
-    # --- CARD LAYOUT ---
+    # Heavy blur so it looks like the reference
+    bg = bg.filter(ImageFilter.GaussianBlur(55))
+    
+    # Very LIGHT dark overlay, NOT heavy, so colors remain vibrant
+    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 70)) 
+    base = Image.alpha_composite(bg, dark_overlay)
+    # ----------------------------------------------------
+
     card_box = [160, 140, 1120, 580]
     img_size = 380
     img_x, img_y = 190, 170
@@ -197,14 +187,14 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     
     gradient = _get_gradient(W, H)
     
-    # Outer Card Glow
-    base = _draw_neon_card(base, card_box, radius=40, gradient=gradient, stroke_width=6, glow_spread=40)
+    # BOLD Outer Card
+    base = _draw_neon_card(base, card_box, radius=40, gradient=gradient, stroke_width=5, glow_spread=35)
 
-    # Inner Square Thumbnail
-    sq_img = _get_square_thumb(song_img, img_size)
+# Square Thumbnail
+    sq_img = _crop_center_square(song_img)
     base = _paste_rounded(base, sq_img, img_x, img_y, img_size, r=30)
     
-    # Inner Thumbnail Glow
+    # BOLD Inner Thumbnail Glow
     img_box = [img_x, img_y, img_x + img_size, img_y + img_size]
     base = _draw_neon_card(base, img_box, radius=30, gradient=gradient, stroke_width=4, glow_spread=20, is_image=True)
 
@@ -215,7 +205,7 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     f_sub = _get_font(FONT_NORMAL, 28)
     f_time = _get_font(FONT_BOLD, 22)
 
-    # Main Texts
+    # Texts
     title_text = _truncate(draw, title.upper(), f_tit, 460)
     artist_text = _truncate(draw, channel, f_sub, 460)
     
@@ -224,16 +214,16 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
 
     # Progress Bar
     bar_y = 450
-    draw.rounded_rectangle([(text_x, bar_y), (text_x + bar_w, bar_y + 6)], radius=3, fill=(180, 180, 180, 150))
+    draw.rounded_rectangle([(text_x, bar_y), (text_x + bar_w, bar_y + 6)], radius=3, fill=(200, 200, 200, 140))
     prog_w = int(bar_w * 0.35) 
     draw.rounded_rectangle([(text_x, bar_y), (text_x + prog_w, bar_y + 6)], radius=3, fill=(157, 205, 59, 255))
     draw.ellipse([(text_x + prog_w - 7, bar_y - 4), (text_x + prog_w + 7, bar_y + 10)], fill=(255, 255, 255, 255))
 
-    # Time Stamps
+    # Time
     draw.text((text_x, 475), "01:37", font=f_time, fill=TEXT_WHITE, anchor="ls")
     draw.text((text_x + bar_w, 475), duration, font=f_time, fill=TEXT_WHITE, anchor="rs")
 
-    # Clean UI Icons
+    # Icons
     icon_y = 525
     icons = [
         ("shuffle", (37, 180, 122)),
@@ -259,3 +249,4 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
 
     _thumb_memory[videoid] = output
     return output
+
