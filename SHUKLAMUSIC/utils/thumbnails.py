@@ -5,7 +5,7 @@ import aiofiles
 from unidecode import unidecode
 from functools import lru_cache
 from typing import Tuple
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 ASSETS      = os.path.join(BASE_DIR, "..", "assets")
@@ -13,7 +13,7 @@ FONT_BOLD   = os.path.join(ASSETS, "f.ttf")
 FONT_NORMAL = os.path.join(ASSETS, "cfont.ttf")
 
 # ═══════════════════════════════════════════════════════════════════
-# THUMBNAIL GENERATOR - 100% PERFECT MATCH (BOLD & BRIGHT BG EDITION)
+# THUMBNAIL GENERATOR - FIXED BACKGROUND & BLUR EDITION
 # ═══════════════════════════════════════════════════════════════════
 
 W, H = 1280, 720
@@ -51,15 +51,12 @@ def _get_gradient(w, h):
     return gradient
 
 def _draw_neon_card(base, box, radius, gradient, stroke_width=6, glow_spread=35, is_image=False):
-    # Background glass for main card - lighter to show the blurred background properly
     if not is_image:
         card_bg = Image.new('RGBA', base.size, (0, 0, 0, 0))
         draw_bg = ImageDraw.Draw(card_bg)
-        # 100 alpha for transparency just like the reference
         draw_bg.rounded_rectangle(box, radius=radius, fill=(20, 20, 20, 110)) 
         base = Image.alpha_composite(base.convert('RGBA'), card_bg)
 
-    # Thick Glow Mask (For that bold look)
     glow_mask = Image.new('L', base.size, 0)
     glow_draw = ImageDraw.Draw(glow_mask)
     glow_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width + 8)
@@ -67,7 +64,6 @@ def _draw_neon_card(base, box, radius, gradient, stroke_width=6, glow_spread=35,
     glow_layer = Image.new('RGBA', base.size, (0, 0, 0, 0))
     glow_layer.paste(gradient, mask=glow_mask)
 
-    # Solid Bold Stroke
     border_mask = Image.new('L', base.size, 0)
     border_draw = ImageDraw.Draw(border_mask)
     border_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width)
@@ -159,23 +155,34 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     except Exception:
         song_img = Image.new("RGBA", (1280, 720), (28, 10, 5))
 
-    # --- BG GENERATION (Bright & Blurred with texts) ---
-    bg = song_img.resize((W, H), Image.LANCZOS).convert("RGBA")
+    # --- BG GENERATION (FIXED BLUR & VISIBILITY) ---
     
-    # Adding background texts BEFORE blurring so they blend beautifully
-    f_bg = _get_font(FONT_BOLD, 75)
-    bg_draw = ImageDraw.Draw(bg)
-    bg_draw.text((80, 570), "25 M+", font=f_bg, fill=(255, 255, 255, 200))
-    bg_draw.text((80, 640), "VIEWS", font=f_bg, fill=(255, 255, 255, 200))
-    bg_draw.text((W - 80, 570), "OFFICIAL", font=f_bg, fill=(255, 255, 255, 200), anchor="ra")
-    bg_draw.text((W - 80, 640), "VIDEO", font=f_bg, fill=(255, 255, 255, 200), anchor="ra")
-
-    # Heavy blur so it looks like the reference
-    bg = bg.filter(ImageFilter.GaussianBlur(55))
+    # 1. Use ImageOps.fit to ensure thumbnail completely covers background without letterbox lines
+    bg = ImageOps.fit(song_img, (W, H), Image.LANCZOS).convert("RGBA")
     
-    # Very LIGHT dark overlay, NOT heavy, so colors remain vibrant
+    # 2. Lower blur radius to 25 so the original image is still slightly visible!
+    bg = bg.filter(ImageFilter.GaussianBlur(25))
+    
+    # 3. Create a separate text layer for background text
+    txt_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    txt_draw = ImageDraw.Draw(txt_layer)
+    f_bg = _get_font(FONT_BOLD, 70)
+    
+    txt_draw.text((80, 560), "25 M+", font=f_bg, fill=(255, 255, 255, 150))
+    txt_draw.text((80, 630), "VIEWS", font=f_bg, fill=(255, 255, 255, 150))
+    txt_draw.text((W - 80, 560), "OFFICIAL", font=f_bg, fill=(255, 255, 255, 150), anchor="ra")
+    txt_draw.text((W - 80, 630), "VIDEO", font=f_bg, fill=(255, 255, 255, 150), anchor="ra")
+    
+    # 4. Blur just the text slightly so it blends nicely, exactly like the reference
+    txt_layer = txt_layer.filter(ImageFilter.GaussianBlur(4))
+    
+    # Merge background with its text
+    bg = Image.alpha_composite(bg, txt_layer)
+    
+    # 5. Very light dark overlay so colors pop
     dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 70)) 
     base = Image.alpha_composite(bg, dark_overlay)
+    
     # ----------------------------------------------------
 
     card_box = [160, 140, 1120, 580]
@@ -186,14 +193,14 @@ async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
     
     gradient = _get_gradient(W, H)
     
-    # BOLD Outer Card
+    # Main Card
     base = _draw_neon_card(base, card_box, radius=40, gradient=gradient, stroke_width=5, glow_spread=35)
 
     # Square Thumbnail
     sq_img = _crop_center_square(song_img)
     base = _paste_rounded(base, sq_img, img_x, img_y, img_size, r=30)
     
-    # BOLD Inner Thumbnail Glow
+    # Inner Thumbnail Glow
     img_box = [img_x, img_y, img_x + img_size, img_y + img_size]
     base = _draw_neon_card(base, img_box, radius=30, gradient=gradient, stroke_width=4, glow_spread=20, is_image=True)
 
