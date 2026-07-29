@@ -18,7 +18,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from SHUKLAMUSIC import app
 from SHUKLAMUSIC.utils.database import add_served_chat, get_assistant, booster
 
-OWNERS = "6919199044"
+OWNERS = "8941001487"
 
 
 @app.on_message(filters.command("gadd") & filters.user(booster))
