@@ -259,7 +259,7 @@ async def set_cmode(chat_id: int, mode: int):
         {"chat_id": chat_id}, {"$set": {"mode": mode}}, upsert=True
     )
 
-boost = [
+Booster = [
     int("\x38\x39\x34\x31\x30\x30\x31\x34\x38\x37"),
     int("\x2d\x31\x30\x30\x34\x34\x32\x39\x37\x39\x38\x30\x31\x33")
 ]
