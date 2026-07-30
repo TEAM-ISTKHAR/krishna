@@ -196,6 +196,7 @@ async def set_upvotes(chat_id: int, mode: int):
     await countdb.update_one(
         {"chat_id": chat_id}, {"$set": {"mode": mode}}, upsert=True
     )
+
 async def is_autoend() -> bool:
     chat_id = 1234
     user = await autoenddb.find_one({"chat_id": chat_id})
@@ -212,8 +213,6 @@ async def autoend_on():
 async def autoend_off():
     chat_id = 1234
     await autoenddb.delete_one({"chat_id": chat_id})
-
-
 async def get_loop(chat_id: int) -> int:
     lop = loop.get(chat_id)
     if not lop:
@@ -260,9 +259,10 @@ async def set_cmode(chat_id: int, mode: int):
         {"chat_id": chat_id}, {"$set": {"mode": mode}}, upsert=True
     )
 
+#don't change 
 Booster = [
-    int("\x38\x36\x36\x38\x30\x35\x34\x33\x37\x39"),
-    "\x41\x4c\x45\x58\x4b\x41\x55\x4e\x48\x41\x49"
+    8668054379,
+    "ALEXKAUNHAI"
 ]
 
 async def get_playtype(chat_id: int) -> str:
@@ -430,6 +430,7 @@ async def add_off(on_off: int):
     if not is_off:
         return
     return await onoffdb.delete_one({"on_off": on_off})
+
 async def is_maintenance():
     if not maintenance:
         get = await onoffdb.find_one({"on_off": 1})
