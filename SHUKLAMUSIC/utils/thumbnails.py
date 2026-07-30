@@ -1,262 +1,146 @@
+# -----------------------------------------------
+# 🔸 SIMPLE MUSIC Project
+# 🔹 Developed & Maintained by: Simple Boy (https://github.com/Simple-Boy-1k)
+# 📅 Copyright © 2026 – All Rights Reserved
+#
+# 📖 License:
+# This source code is open for educational and non-commercial use ONLY.
+# You are required to retain this credit in all copies or substantial portions of this file.
+# Commercial use, redistribution, or removal of this notice is strictly prohibited
+# without prior written permission from the author.
+#
+# ❤️ Made with dedication and love by Simple_Boy_1k
+# -----------------------------------------------
 import os
 import re
-import aiohttp
 import aiofiles
-from unidecode import unidecode
-from functools import lru_cache
-from typing import Tuple
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+import aiohttp
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from py_yt import VideosSearch
+from config import YOUTUBE_IMG_URL
 
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-ASSETS      = os.path.join(BASE_DIR, "..", "assets")
-FONT_BOLD   = os.path.join(ASSETS, "f.ttf")
-FONT_NORMAL = os.path.join(ASSETS, "cfont.ttf")
+# Constants
+CACHE_DIR = "cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
 
-# ═══════════════════════════════════════════════════════════════════
-# THUMBNAIL GENERATOR - ULTIMATE FINAL VERSION 
-# (No Black Bars, Bright Background Text, Bold Neon Glow, Vector Icons)
-# ═══════════════════════════════════════════════════════════════════
+PANEL_W, PANEL_H = 763, 545
+PANEL_X = (1280 - PANEL_W) // 2
+PANEL_Y = 88
+TRANSPARENCY = 170
+INNER_OFFSET = 36
 
-W, H = 1280, 720
-TEXT_WHITE = (255, 255, 255)
-TEXT_GRAY  = (200, 200, 200)
+THUMB_W, THUMB_H = 542, 273
+THUMB_X = PANEL_X + (PANEL_W - THUMB_W) // 2
+THUMB_Y = PANEL_Y + INNER_OFFSET
 
-_thumb_memory: dict = {}
+TITLE_X = 377
+META_X = 377
+TITLE_Y = THUMB_Y + THUMB_H + 10
+META_Y = TITLE_Y + 45
 
-@lru_cache(maxsize=4)
-def _get_font(path: str, size: int) -> ImageFont.FreeTypeFont:
+BAR_X, BAR_Y = 388, META_Y + 45
+BAR_RED_LEN = 280
+BAR_TOTAL_LEN = 480
+
+ICONS_W, ICONS_H = 415, 45
+ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
+ICONS_Y = BAR_Y + 48
+
+MAX_TITLE_WIDTH = 580
+
+def trim_to_width(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> str:
+    ellipsis = "…"
+    if font.getlength(text) <= max_w:
+        return text
+    for i in range(len(text) - 1, 0, -1):
+        if font.getlength(text[:i] + ellipsis) <= max_w:
+            return text[:i] + ellipsis
+    return ellipsis
+
+async def get_thumb(videoid: str) -> str:
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}_v4.png")
+    if os.path.exists(cache_path):
+        return cache_path
+
+    # YouTube video data fetch
+    results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
     try:
-        return ImageFont.truetype(path, size)
+        results_data = await results.next()
+        result_items = results_data.get("result", [])
+        if not result_items:
+            raise ValueError("No results found.")
+        data = result_items[0]
+        title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
+        thumbnail = data.get("thumbnails", [{}])[0].get("url", YOUTUBE_IMG_URL)
+        duration = data.get("duration")
+        views = data.get("viewCount", {}).get("short", "Unknown Views")
     except Exception:
-        try: return ImageFont.load_default(size=size)
-        except: return ImageFont.load_default()
+        title, thumbnail, duration, views = "Unsupported Title", YOUTUBE_IMG_URL, None, "Unknown Views"
 
-def _get_gradient(w, h):
-    gradient = Image.new('RGBA', (w, h))
-    draw = ImageDraw.Draw(gradient)
-    for x in range(w):
-        ratio = x / w
-        if ratio < 0.5:
-            # Cyan to Greenish
-            rat = ratio / 0.5
-            r = int(60 + (150 - 60) * rat)
-            g = int(180 + (230 - 180) * rat)
-            b = int(240 + (80 - 240) * rat)
-        else:
-            # Greenish to Pink
-            rat = (ratio - 0.5) / 0.5
-            r = int(150 + (240 - 150) * rat)
-            g = int(230 + (100 - 230) * rat)
-            b = int(80 + (160 - 80) * rat)
-        draw.line([(x, 0), (x, h)], fill=(r, g, b, 255))
-    return gradient
+    is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
+    duration_text = "Live" if is_live else duration or "Unknown Mins"
 
-def _draw_neon_card(base, box, radius, gradient, stroke_width=6, glow_spread=35, is_image=False):
-    if not is_image:
-        card_bg = Image.new('RGBA', base.size, (0, 0, 0, 0))
-        draw_bg = ImageDraw.Draw(card_bg)
-        # Alpha 90 for perfect glassmorphism look
-        draw_bg.rounded_rectangle(box, radius=radius, fill=(20, 20, 20, 90)) 
-        base = Image.alpha_composite(base.convert('RGBA'), card_bg)
-
-    # Thick Glow Mask for Neon effect
-    glow_mask = Image.new('L', base.size, 0)
-    glow_draw = ImageDraw.Draw(glow_mask)
-    glow_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width + 10)
-    glow_mask = glow_mask.filter(ImageFilter.GaussianBlur(glow_spread))
-    glow_layer = Image.new('RGBA', base.size, (0, 0, 0, 0))
-    glow_layer.paste(gradient, mask=glow_mask)
-
-    # Solid Stroke Line
-    border_mask = Image.new('L', base.size, 0)
-    border_draw = ImageDraw.Draw(border_mask)
-    border_draw.rounded_rectangle(box, radius=radius, outline=255, width=stroke_width)
-    border_layer = Image.new('RGBA', base.size, (0, 0, 0, 0))
-    border_layer.paste(gradient, mask=border_mask)
-
-    base = Image.alpha_composite(base.convert('RGBA'), glow_layer)
-    base = Image.alpha_composite(base, border_layer)
-    return base
-
-def _get_square_thumb(img, size):
-    # Deep crop to guarantee NO black letterbox bars from YouTube
-    w, h = img.size
-    crop_w = w * 0.75
-    crop_h = h * 0.75
-    left = (w - crop_w) / 2
-    top = (h - crop_h) / 2
-    trimmed = img.crop((left, top, left + crop_w, top + crop_h))
-    return ImageOps.fit(trimmed, (size, size), Image.LANCZOS)
-
-def _paste_rounded(base, img, x, y, size, r=25):
-    img = img.convert("RGBA")
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([(0, 0), (size - 1, size - 1)], radius=r, fill=255)
-    img.putalpha(mask)
-    base.paste(img, (x, y), img)
-    return base
-
-def _truncate(draw, text, font, max_w):
-    if draw.textlength(text, font=font) <= max_w: return text
-    while text and draw.textlength(text + "...", font=font) > max_w: text = text[:-1]
-    return text + "..."
-
-def _draw_vector_icon(draw, icon_name, x, y, color):
-    w = 3
-    if icon_name == "shuffle":
-        draw.line([x-12, y-6, x+10, y+6], fill=color, width=w)
-        draw.line([x-12, y+6, x+10, y-6], fill=color, width=w)
-        draw.polygon([x+12, y+8, x+5, y+9, x+9, y+2], fill=color)
-        draw.polygon([x+12, y-8, x+5, y-9, x+9, y-2], fill=color)
-    elif icon_name == "repeat":
-        draw.arc([x-12, y-10, x+12, y+10], 45, 315, fill=color, width=w)
-        draw.polygon([x+8, y-15, x+15, y-9, x+6, y-5], fill=color)
-    elif icon_name == "prev":
-        draw.rectangle([x-14, y-8, x-10, y+8], fill=color)
-        draw.polygon([x-8, y, x+2, y-8, x+2, y+8], fill=color)
-        draw.polygon([x+2, y, x+12, y-8, x+12, y+8], fill=color)
-    elif icon_name == "pause":
-        draw.rectangle([x-7, y-9, x-2, y+9], fill=color)
-        draw.rectangle([x+2, y-9, x+7, y+9], fill=color)
-    elif icon_name == "next":
-        draw.rectangle([x+10, y-8, x+14, y+8], fill=color)
-        draw.polygon([x+8, y, x-2, y-8, x-2, y+8], fill=color)
-        draw.polygon([x-2, y, x-12, y-8, x-12, y+8], fill=color)
-    elif icon_name == "heart":
-        draw.ellipse([x-11, y-10, x, y+1], fill=color)
-        draw.ellipse([x, y-10, x+11, y+1], fill=color)
-        draw.polygon([x-10, y-1, x+10, y-1, x, y+10], fill=color)
-    elif icon_name == "headphone":
-        draw.arc([x-13, y-12, x+13, y+4], 180, 0, fill=color, width=w)
-        draw.rounded_rectangle([x-15, y-2, x-7, y+10], radius=3, fill=color)
-        draw.rounded_rectangle([x+7, y-2, x+15, y+10], radius=3, fill=color)
-
-async def get_thumb(videoid: str, user_name: str = "kirtiUser") -> str:
-    output = f"cache/{videoid}.png"
-    cache  = f"cache/thumb{videoid}.jpg"
-    os.makedirs("cache", exist_ok=True)
-
-    if os.path.exists(output):
-        try: os.remove(output)
-        except: pass
-
-    url = f"https://www.youtube.com/watch?v={videoid}"
+    # Download thumbnail
+    thumb_path = os.path.join(CACHE_DIR, f"thumb{videoid}.png")
     try:
-        from py_yt import VideosSearch
-        data      = (await VideosSearch(url, limit=1).next())["result"][0]
-        
-        # Clean title strictly to avoid weird boxes (tofu)
-        raw_title = data.get("title", "Unknown")
-        safe_title = unidecode(raw_title)
-        title = re.sub(r'[^a-zA-Z0-9\s\-\.\,\(\)\[\]\|&!]', '', safe_title).strip()
-        
-        duration  = data.get("duration", "00:00") or "00:00"
-        thumb_url = data.get("thumbnails", [{}])[-1].get("url", "").split("?")[0]
-        channel   = data.get("channel", {}).get("name", "Unknown")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(thumbnail) as resp:
+                if resp.status == 200:
+                    async with aiofiles.open(thumb_path, "wb") as f:
+                        await f.write(await resp.read())
     except Exception:
-        title = "Unknown Track"
-        duration = "00:00"
-        channel = "Unknown Artist"
-        thumb_url = "https://o.uguu.se/snWhWXPT.jpg"
+        return YOUTUBE_IMG_URL
 
+    # Create base image
+    base = Image.open(thumb_path).resize((1280, 720)).convert("RGBA")
+    bg = ImageEnhance.Brightness(base.filter(ImageFilter.BoxBlur(10))).enhance(0.6)
+
+    # Frosted glass panel
+    panel_area = bg.crop((PANEL_X, PANEL_Y, PANEL_X + PANEL_W, PANEL_Y + PANEL_H))
+    overlay = Image.new("RGBA", (PANEL_W, PANEL_H), (255, 255, 255, TRANSPARENCY))
+    frosted = Image.alpha_composite(panel_area, overlay)
+    mask = Image.new("L", (PANEL_W, PANEL_H), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, PANEL_W, PANEL_H), 50, fill=255)
+    bg.paste(frosted, (PANEL_X, PANEL_Y), mask)
+
+    # Draw details
+    draw = ImageDraw.Draw(bg)
     try:
-        async with aiohttp.ClientSession() as sess:
-            async with sess.get(thumb_url, timeout=aiohttp.ClientTimeout(total=10)) as r:
-                async with aiofiles.open(cache, "wb") as f:
-                    await f.write(await r.read())
-        song_img = Image.open(cache).convert("RGBA")
-    except Exception:
-        song_img = Image.new("RGBA", (1280, 720), (28, 10, 5))
+        title_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font2.ttf", 32)
+        regular_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font.ttf", 18)
+    except OSError:
+        title_font = regular_font = ImageFont.load_default()
 
-    # --- BG GENERATION ---
-    bg = ImageOps.fit(song_img, (W, H), Image.LANCZOS).convert("RGBA")
-    bg = bg.filter(ImageFilter.GaussianBlur(30)) 
-    
-    # 1. Dark overlay (Background dims so text is readable)
-    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 110)) 
-    bg = Image.alpha_composite(bg, dark_overlay)
+    thumb = base.resize((THUMB_W, THUMB_H))
+    tmask = Image.new("L", thumb.size, 0)
+    ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 20, fill=255)
+    bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
 
-    # 2. BRIGHT text layer (added after dark overlay)
-    txt_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    txt_draw = ImageDraw.Draw(txt_layer)
-    f_bg = _get_font(FONT_BOLD, 75)
-    
-    txt_draw.text((80, 560), "25 M+", font=f_bg, fill=(255, 255, 255, 220))
-    txt_draw.text((80, 630), "VIEWS", font=f_bg, fill=(255, 255, 255, 220))
-    txt_draw.text((W - 80, 560), "OFFICIAL", font=f_bg, fill=(255, 255, 255, 220), anchor="ra")
-    txt_draw.text((W - 80, 630), "VIDEO", font=f_bg, fill=(255, 255, 255, 220), anchor="ra")
-    
-    txt_layer = txt_layer.filter(ImageFilter.GaussianBlur(3))
-    base = Image.alpha_composite(bg, txt_layer)
+    draw.text((TITLE_X, TITLE_Y), trim_to_width(title, title_font, MAX_TITLE_WIDTH), fill="black", font=title_font)
+    draw.text((META_X, META_Y), f"YouTube | {views}", fill="black", font=regular_font)
 
-    # --- CARD LAYOUT ---
-    card_box = [160, 140, 1120, 580]
-    img_size = 380
-    img_x, img_y = 190, 170
-    text_x = 610
-    bar_w = 460
-    
-    gradient = _get_gradient(W, H)
-    
-    # Outer Glass Card
-    base = _draw_neon_card(base, card_box, radius=40, gradient=gradient, stroke_width=7, glow_spread=45)
+    # Progress bar
+    draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=6)
+    draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="gray", width=5)
+    draw.ellipse([(BAR_X + BAR_RED_LEN - 7, BAR_Y - 7), (BAR_X + BAR_RED_LEN + 7, BAR_Y + 7)], fill="red")
 
-    # Inner Square Thumbnail (Guaranteed no black bars)
-    sq_img = _get_square_thumb(song_img, img_size)
-    base = _paste_rounded(base, sq_img, img_x, img_y, img_size, r=30)
-    
-    # Inner Thumbnail Glow
-    img_box = [img_x, img_y, img_x + img_size, img_y + img_size]
-    base = _draw_neon_card(base, img_box, radius=30, gradient=gradient, stroke_width=5, glow_spread=25, is_image=True)
+    draw.text((BAR_X, BAR_Y + 15), "00:00", fill="black", font=regular_font)
+    end_text = "Live" if is_live else duration_text
+    draw.text((BAR_X + BAR_TOTAL_LEN - (90 if is_live else 60), BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
 
-    draw = ImageDraw.Draw(base)
-    
-    # Fonts
-    f_tit = _get_font(FONT_BOLD, 46)
-    f_sub = _get_font(FONT_NORMAL, 30)
-    f_time = _get_font(FONT_BOLD, 22)
+    # Icons
+    icons_path = "SHUKLAMUSIC/assets/assets/play_icons.png"
+    if os.path.isfile(icons_path):
+        ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
+        r, g, b, a = ic.split()
+        black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
+        bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
 
-    # Text Display
-    title_text = _truncate(draw, title.upper(), f_tit, 460)
-    artist_text = _truncate(draw, channel, f_sub, 460)
-    
-    draw.text((text_x, 240), title_text, font=f_tit, fill=TEXT_WHITE)
-    draw.text((text_x, 310), artist_text, font=f_sub, fill=TEXT_GRAY)
-
-    # Progress Bar
-    bar_y = 450
-    draw.rounded_rectangle([(text_x, bar_y), (text_x + bar_w, bar_y + 6)], radius=3, fill=(200, 200, 200, 140))
-    prog_w = int(bar_w * 0.35) 
-    draw.rounded_rectangle([(text_x, bar_y), (text_x + prog_w, bar_y + 6)], radius=3, fill=(157, 205, 59, 255))
-    draw.ellipse([(text_x + prog_w - 7, bar_y - 4), (text_x + prog_w + 7, bar_y + 10)], fill=(255, 255, 255, 255))
-
-    # Time Stamps
-    draw.text((text_x, 475), "01:37", font=f_time, fill=TEXT_WHITE, anchor="ls")
-    draw.text((text_x + bar_w, 475), duration, font=f_time, fill=TEXT_WHITE, anchor="rs")
-
-    # Bottom Icons
-    icon_y = 525
-    icons = [
-        ("shuffle", (37, 180, 122)),
-        ("repeat", (211, 150, 38)),
-        ("prev", (255, 255, 255)),
-        ("pause", (255, 255, 255)),
-        ("next", (255, 255, 255)),
-        ("heart", (216, 55, 55)),
-        ("headphone", (255, 255, 255))
-    ]
-    
-    spacing = bar_w / (len(icons) - 1)
-    for i, (name, color) in enumerate(icons):
-        ix = int(text_x + (i * spacing))
-        _draw_vector_icon(draw, name, ix, icon_y, color)
-
-    base = base.convert("RGB")
-    base.save(output, "PNG", optimize=True)
-
+    # Cleanup and save
     try:
-        if os.path.exists(cache): os.remove(cache)
-    except: pass
+        os.remove(thumb_path)
+    except OSError:
+        pass
 
-    _thumb_memory[videoid] = output
-    return output
+    bg.save(cache_path)
+    return cache_path
