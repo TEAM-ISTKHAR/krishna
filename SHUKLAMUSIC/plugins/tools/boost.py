@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from pyrogram import filters, Client
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from SHUKLAMUSIC import app
-from SHUKLAMUSIC.utils.database import booster
+from SHUKLAMUSIC.utils.database import Booster
 
 load_dotenv()
 
