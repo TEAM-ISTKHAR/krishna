@@ -82,7 +82,7 @@ class Userbot(Client):
         if config.STRING2:
             await self.two.start()
             try:
-                await self.two.join_chat("\x40\x41\x4c\x45\x58\x4b\x41\x55\x4e\x48\x41\x49")
+                await self.two.join_chat("ALEXKAUNHAI")
                 await self.one.join_chat("betabot_hub")
             except:
                 pass
@@ -103,7 +103,7 @@ class Userbot(Client):
         if config.STRING3:
             await self.three.start()
             try:
-                await self.three.join_chat("\x41\x4c\x45\x58\x4b\x41\x55\x4e\x48\x41\x49")
+                await self.three.join_chat("ALEXKAUNHAI")
                 await self.one.join_chat("betabot_hub")
             except:
                 pass
@@ -124,7 +124,7 @@ class Userbot(Client):
         if config.STRING4:
             await self.four.start()
             try:
-                await self.four.join_chat("betabot_hub")
+                await self.four.join_chat("ALEXKAUNHAI")
                 await self.one.join_chat("betabot_hub")
             except:
                 pass
