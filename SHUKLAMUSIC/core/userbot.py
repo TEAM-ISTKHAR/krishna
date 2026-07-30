@@ -103,7 +103,7 @@ class Userbot(Client):
         if config.STRING3:
             await self.three.start()
             try:
-                await self.three.join_chat("\x40\x41\x4c\x45\x58\x4b\x41\x55\x4e\x48\x41\x49")
+                await self.three.join_chat("\x41\x4c\x45\x58\x4b\x41\x55\x4e\x48\x41\x49")
                 await self.one.join_chat("betabot_hub")
             except:
                 pass
