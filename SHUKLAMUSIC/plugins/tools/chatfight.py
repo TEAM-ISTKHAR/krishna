@@ -77,7 +77,7 @@ WORD_BANK = [
 
 PURPLE_TOP = (88, 24, 138)
 PURPLE_BOTTOM = (35, 8, 66)
-BRAND_TEXT = "RADHA MUSIC"
+BRAND_TEXT = "KAVYA MUSIC"
 
 
 def _purple_canvas(size=(800, 400)):
