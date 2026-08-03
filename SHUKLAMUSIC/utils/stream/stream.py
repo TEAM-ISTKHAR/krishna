@@ -12,7 +12,6 @@
 # ❤️ Made with dedication and love by ItzShukla
 # -----------------------------------------------
 import os
-import asyncio
 from random import randint
 from typing import Union
 from pyrogram.types import InlineKeyboardMarkup
@@ -29,43 +28,6 @@ from SHUKLAMUSIC.utils.thumbnails import get_thumb
 
 # Naye database file se import
 from SHUKLAMUSIC.core.cachedb import get_cache, save_cache
-
-# ------------------------------------------------
-# 🚀 BACKGROUND UPLOAD TASK (PLAY KE BAAD)
-# ------------------------------------------------
-async def background_dump_task(file_path, title, vidid):
-    await asyncio.sleep(2)  # 2 second ruk kar upload shuru karega
-    try:
-        check_again = await get_cache(vidid)
-        if not check_again:
-            if hasattr(config, "DUMP_CHANNEL_ID") and config.DUMP_CHANNEL_ID:
-                # ID ko Integer (Number) mein convert karna zaroori hai
-                channel_id = int(config.DUMP_CHANNEL_ID) 
-                
-                caption_text = f"**Song:** {title}\n**ID:** `{vidid}`\n**Saved by:** {app.mention}"
-                
-                # File channel me upload karna
-                dump_msg = await app.send_document(
-                    chat_id=channel_id,
-                    document=file_path,
-                    caption=caption_text
-                )
-                
-                # Telegram ki File ID nikalna
-                if dump_msg.audio:
-                    final_file_id = dump_msg.audio.file_id
-                elif dump_msg.document:
-                    final_file_id = dump_msg.document.file_id
-                else:
-                    final_file_id = None
-                    
-                # Database me save karna
-                if final_file_id:
-                    await save_cache(vidid, final_file_id)
-                    print(f"✅ SUCCESS: {title} Saved to Database & Channel!")
-    except Exception as e:
-        print(f"❌ UPLOAD ERROR: Gaana channel me nahi gaya. Reason: {e}")
-# ------------------------------------------------
 
 
 async def stream(
@@ -192,29 +154,28 @@ async def stream(
         thumbnail = result["thumb"]
         status = True if video else None
         
+        needs_upload = False
         cached_file_id = await get_cache(vidid)
         
         if cached_file_id:
             try:
                 await mystic.edit_text("⚡ **Fast Downloading from Telegram Cache...**")
                 file_path = await app.download_media(cached_file_id)
-                direct = False
+                direct = True
             except Exception:
                 try:
                     file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
+                    needs_upload = True
                 except:
                     raise AssistantErr(_["play_14"])
         else:
             try:
                 file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
-                
-                # Gaana upload hone ke task ko delay ke sath background me dal diya
-                if not direct:
-                    asyncio.create_task(background_dump_task(file_path, title, vidid))
-                    
+                needs_upload = True
             except:
                 raise AssistantErr(_["play_14"])
 
+        # Pehle gaana Voice Chat me laga diya aur User ko message bhej diya
         if await is_active_chat(chat_id):
             await put_queue(
                 chat_id,
@@ -271,6 +232,36 @@ async def stream(
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "stream"
+            
+        # ------------------------------------------------
+        # 🚀 UPLOAD AFTER PLAYING (Ye bina rukaawat channel me upload karega)
+        # ------------------------------------------------
+        if needs_upload:
+            try:
+                check_again = await get_cache(vidid)
+                if not check_again:
+                    if hasattr(config, "DUMP_CHANNEL_ID") and config.DUMP_CHANNEL_ID:
+                        channel_id = int(config.DUMP_CHANNEL_ID)
+                        caption_text = f"**Song:** {title}\n**ID:** `{vidid}`\n**Saved by:** {app.mention}"
+                        dump_msg = await app.send_document(
+                            chat_id=channel_id,
+                            document=file_path,
+                            caption=caption_text
+                        )
+                        
+                        if dump_msg.audio:
+                            final_file_id = dump_msg.audio.file_id
+                        elif dump_msg.document:
+                            final_file_id = dump_msg.document.file_id
+                        else:
+                            final_file_id = None
+                            
+                        if final_file_id:
+                            await save_cache(vidid, final_file_id)
+                            print(f"✅ SUCCESS: Saved to Cache!")
+            except Exception as e:
+                print(f"❌ Dump Upload Error: {e}")
+        # ------------------------------------------------
             
     elif streamtype == "soundcloud":
         file_path = result["filepath"]
