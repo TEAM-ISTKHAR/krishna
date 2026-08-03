@@ -1,30 +1,48 @@
 # -----------------------------------------------
-# 🔸 Cached Songs Database
+# 🔸 StrangerMusic Project
+# 🔹 Developed & Maintained by: Shashank Shukla (https://github.com/itzshukla)
+# 📅 Copyright © 2022 – All Rights Reserved
+#
+# 📖 License:
+# This source code is open for educational and non-commercial use ONLY.
+# You are required to retain this credit in all copies or substantial portions of this file.
+# Commercial use, redistribution, or removal of this notice is strictly prohibited
+# without prior written permission from the author.
+#
+# ❤️ Made with dedication and love by ItzShukla
 # -----------------------------------------------
 from SHUKLAMUSIC.utils.mongo import db
 
-cache_db = db.cache_songs
+coupledb = db.couple
 
-async def get_cache(video_id: str):
-    """
-    Check karta hai ki kya gaana pehle se channel me dump hai.
-    """
-    document = await cache_db.find_one({"video_id": video_id})
-    if document:
-        return document.get("file_id")
-    return None
-
-async def save_cache(video_id: str, file_id: str):
-    """
-    Naye download hue gaane ka data MongoDB me save karta hai.
-    """
-    document = await cache_db.find_one({"video_id": video_id})
-    if document:
-        return await cache_db.update_one(
-            {"video_id": video_id}, 
-            {"$set": {"file_id": file_id}}
-        )
+async def _get_lovers(cid: int):
+    lovers = await coupledb.find_one({"chat_id": cid})
+    if lovers:
+        lovers = lovers["couple"]
     else:
-        return await cache_db.insert_one(
-            {"video_id": video_id, "file_id": file_id}
-        )
+        lovers = {}
+    return lovers
+
+async def _get_image(cid: int):
+    lovers = await coupledb.find_one({"chat_id": cid})
+    if lovers:
+        lovers = lovers["img"]
+    else:
+        lovers = {}
+    return lovers
+
+async def get_couple(cid: int, date: str):
+    lovers = await _get_lovers(cid)
+    if date in lovers:
+        return lovers[date]
+    else:
+        return False
+
+async def save_couple(cid: int, date: str, couple: dict, img: str):
+    lovers = await _get_lovers(cid)
+    lovers[date] = couple
+    await coupledb.update_one(
+        {"chat_id": cid},
+        {"$set": {"couple": lovers, "img": img}},
+        upsert=True,
+                              )
