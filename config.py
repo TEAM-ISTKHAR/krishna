@@ -54,8 +54,12 @@ SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/TuneBots")
 SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/ziddi_thoughts")
 
 # Assistant settings
-AUTO_LEAVING_ASSISTANT = getenv("AUTO_LEAVING_ASSISTANT", "True")
+AUTO_LEAVING_ASSISTANT = getenv("AUTO_LEAVING_ASSISTANT", "False")
 AUTO_LEAVE_ASSISTANT_TIME = int(getenv("ASSISTANT_LEAVE_TIME", "9000"))
+
+
+# Dump channel ID for caching songs
+DUMP_CHANNEL_ID = int(getenv("DUMP_CHANNEL_ID", "-1003997479200")) # Apna channel ID dalein
 
 
 # Server limits and configurations - These can be set based on your server configurations
