@@ -26,8 +26,8 @@ from SHUKLAMUSIC.utils.pastebin import SHUKLABin
 from SHUKLAMUSIC.utils.stream.queue import put_queue, put_queue_index
 from SHUKLAMUSIC.utils.thumbnails import get_thumb
 
-# Naye database file se import
-from SHUKLAMUSIC.mongo.cachedb import get_cache, save_cache
+# Naye database file se import (Ab ye 'core' folder se aayega kyunki aapne wahi banaya hai)
+from SHUKLAMUSIC.core.cachedb import get_cache, save_cache
 
 
 async def stream(
@@ -47,7 +47,7 @@ async def stream(
         return
     if forceplay:
         await SHUKLA.force_stop_stream(chat_id)
-    
+        
     if streamtype == "playlist":
         msg = f"{_['play_19']}\n\n"
         count = 0
@@ -162,7 +162,6 @@ async def stream(
         if cached_file_id:
             try:
                 await mystic.edit_text("⚡ **Fast Downloading from Telegram Cache...**")
-                # Telegram se fast download (YouTube se download karne me jo time lagta tha, wo bachega)
                 file_path = await app.download_media(cached_file_id)
                 direct = True
             except Exception:
@@ -172,22 +171,18 @@ async def stream(
                     raise AssistantErr(_["play_14"])
         else:
             try:
-                # Agar cache me nahi hai, toh Youtube se download karega
                 file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
                 
-                # Check karega ki config me DUMP_CHANNEL_ID set hai ya nahi
                 if hasattr(config, "DUMP_CHANNEL_ID") and config.DUMP_CHANNEL_ID:
                     try:
-                        # Dump Channel me upload kar dega
                         dump_msg = await app.send_document(
                             chat_id=config.DUMP_CHANNEL_ID,
                             document=file_path,
                             caption=f"🎥 **Title:** {title}\n🔗 **Video ID:** `{vidid}`"
                         )
-                        # ID ko database me save kar dega agli baar ke liye
                         await save_cache(vidid, dump_msg.document.file_id)
                     except Exception as e:
-                        pass # Agar channel upload me koi error aaye toh bhi gaana bajega
+                        pass
             except:
                 raise AssistantErr(_["play_14"])
         # ------------------------------------------------
