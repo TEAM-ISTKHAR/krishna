@@ -26,7 +26,7 @@ from SHUKLAMUSIC.utils.pastebin import SHUKLABin
 from SHUKLAMUSIC.utils.stream.queue import put_queue, put_queue_index
 from SHUKLAMUSIC.utils.thumbnails import get_thumb
 
-# Naye database file se import (Ab ye 'core' folder se aayega kyunki aapne wahi banaya hai)
+# Naye database file se import
 from SHUKLAMUSIC.core.cachedb import get_cache, save_cache
 
 
@@ -173,16 +173,20 @@ async def stream(
             try:
                 file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
                 
-                if hasattr(config, "DUMP_CHANNEL_ID") and config.DUMP_CHANNEL_ID:
-                    try:
-                        dump_msg = await app.send_document(
-                            chat_id=config.DUMP_CHANNEL_ID,
-                            document=file_path,
-                            caption=f"🎥 **Title:** {title}\n🔗 **Video ID:** `{vidid}`"
-                        )
-                        await save_cache(vidid, dump_msg.document.file_id)
-                    except Exception as e:
-                        pass
+                check_again = await get_cache(vidid)
+                if not check_again:
+                    if hasattr(config, "DUMP_CHANNEL_ID") and config.DUMP_CHANNEL_ID:
+                        try:
+                            # Naya format jisme aapke bot ka mention bhi aayega
+                            caption_text = f"**Song:** {title}\n**ID:** `{vidid}`\n**Saved by:** {app.mention}"
+                            dump_msg = await app.send_document(
+                                chat_id=config.DUMP_CHANNEL_ID,
+                                document=file_path,
+                                caption=caption_text
+                            )
+                            await save_cache(vidid, dump_msg.document.file_id)
+                        except Exception as e:
+                            pass
             except:
                 raise AssistantErr(_["play_14"])
         # ------------------------------------------------
