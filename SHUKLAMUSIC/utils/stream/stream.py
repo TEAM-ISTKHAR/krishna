@@ -31,21 +31,27 @@ from SHUKLAMUSIC.utils.thumbnails import get_thumb
 from SHUKLAMUSIC.core.cachedb import get_cache, save_cache
 
 # ------------------------------------------------
-# 🚀 BACKGROUND UPLOAD TASK (PLAY KE 5 SEC BAAD)
+# 🚀 BACKGROUND UPLOAD TASK (PLAY KE BAAD)
 # ------------------------------------------------
 async def background_dump_task(file_path, title, vidid):
-    await asyncio.sleep(5)  # Play hone ke 5 second baad shuru hoga
+    await asyncio.sleep(2)  # 2 second ruk kar upload shuru karega
     try:
         check_again = await get_cache(vidid)
         if not check_again:
             if hasattr(config, "DUMP_CHANNEL_ID") and config.DUMP_CHANNEL_ID:
+                # ID ko Integer (Number) mein convert karna zaroori hai
+                channel_id = int(config.DUMP_CHANNEL_ID) 
+                
                 caption_text = f"**Song:** {title}\n**ID:** `{vidid}`\n**Saved by:** {app.mention}"
+                
+                # File channel me upload karna
                 dump_msg = await app.send_document(
-                    chat_id=config.DUMP_CHANNEL_ID,
+                    chat_id=channel_id,
                     document=file_path,
                     caption=caption_text
                 )
                 
+                # Telegram ki File ID nikalna
                 if dump_msg.audio:
                     final_file_id = dump_msg.audio.file_id
                 elif dump_msg.document:
@@ -53,10 +59,12 @@ async def background_dump_task(file_path, title, vidid):
                 else:
                     final_file_id = None
                     
+                # Database me save karna
                 if final_file_id:
                     await save_cache(vidid, final_file_id)
+                    print(f"✅ SUCCESS: {title} Saved to Database & Channel!")
     except Exception as e:
-        print(f"Background Dump Error: {e}")
+        print(f"❌ UPLOAD ERROR: Gaana channel me nahi gaya. Reason: {e}")
 # ------------------------------------------------
 
 
@@ -190,7 +198,7 @@ async def stream(
             try:
                 await mystic.edit_text("⚡ **Fast Downloading from Telegram Cache...**")
                 file_path = await app.download_media(cached_file_id)
-                direct = False # Local path, so direct is False
+                direct = False
             except Exception:
                 try:
                     file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
@@ -200,8 +208,7 @@ async def stream(
             try:
                 file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
                 
-                # Gaana upload hone ke task ko 5 sec ke delay ke sath background me dal diya
-                # Jisse bot fast play karna shuru kar dega
+                # Gaana upload hone ke task ko delay ke sath background me dal diya
                 if not direct:
                     asyncio.create_task(background_dump_task(file_path, title, vidid))
                     
