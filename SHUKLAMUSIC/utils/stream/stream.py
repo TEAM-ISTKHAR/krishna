@@ -177,16 +177,26 @@ async def stream(
                 if not check_again:
                     if hasattr(config, "DUMP_CHANNEL_ID") and config.DUMP_CHANNEL_ID:
                         try:
-                            # Naya format jisme aapke bot ka mention bhi aayega
                             caption_text = f"**Song:** {title}\n**ID:** `{vidid}`\n**Saved by:** {app.mention}"
                             dump_msg = await app.send_document(
                                 chat_id=config.DUMP_CHANNEL_ID,
                                 document=file_path,
                                 caption=caption_text
                             )
-                            await save_cache(vidid, dump_msg.document.file_id)
+                            
+                            # Ab Telegram chahe audio bheje ya document, dono ki ID nikal kar DB me jayegi
+                            if dump_msg.audio:
+                                final_file_id = dump_msg.audio.file_id
+                            elif dump_msg.document:
+                                final_file_id = dump_msg.document.file_id
+                            else:
+                                final_file_id = None
+                                
+                            if final_file_id:
+                                await save_cache(vidid, final_file_id)
+                                
                         except Exception as e:
-                            pass
+                            print(f"Error during dump or cache save: {e}")
             except:
                 raise AssistantErr(_["play_14"])
         # ------------------------------------------------
