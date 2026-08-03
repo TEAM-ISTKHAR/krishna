@@ -26,6 +26,9 @@ from SHUKLAMUSIC.utils.pastebin import SHUKLABin
 from SHUKLAMUSIC.utils.stream.queue import put_queue, put_queue_index
 from SHUKLAMUSIC.utils.thumbnails import get_thumb
 
+# Naye database file se import
+from SHUKLAMUSIC.mongo.cachedb import get_cache, save_cache
+
 
 async def stream(
     _,
@@ -44,6 +47,7 @@ async def stream(
         return
     if forceplay:
         await SHUKLA.force_stop_stream(chat_id)
+    
     if streamtype == "playlist":
         msg = f"{_['play_19']}\n\n"
         count = 0
@@ -141,6 +145,7 @@ async def stream(
                 caption=_["play_21"].format(position, link),
                 reply_markup=upl,
             )
+            
     elif streamtype == "youtube":
         link = result["link"]
         vidid = result["vidid"]
@@ -148,12 +153,47 @@ async def stream(
         duration_min = result["duration_min"]
         thumbnail = result["thumb"]
         status = True if video else None
-        try:
-            file_path, direct = await YouTube.download(
-                vidid, mystic, videoid=True, video=status
-            )
-        except:
-            raise AssistantErr(_["play_14"])
+        
+        # ------------------------------------------------
+        # 🚀 AUTO-CACHE & DUMP LOGIC START HERE
+        # ------------------------------------------------
+        cached_file_id = await get_cache(vidid)
+        
+        if cached_file_id:
+            try:
+                await mystic.edit_text("⚡ **Fast Downloading from Telegram Cache...**")
+                # Telegram se fast download (YouTube se download karne me jo time lagta tha, wo bachega)
+                file_path = await app.download_media(cached_file_id)
+                direct = True
+            except Exception:
+                try:
+                    file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
+                except:
+                    raise AssistantErr(_["play_14"])
+        else:
+            try:
+                # Agar cache me nahi hai, toh Youtube se download karega
+                file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
+                
+                # Check karega ki config me DUMP_CHANNEL_ID set hai ya nahi
+                if hasattr(config, "DUMP_CHANNEL_ID") and config.DUMP_CHANNEL_ID:
+                    try:
+                        # Dump Channel me upload kar dega
+                        dump_msg = await app.send_document(
+                            chat_id=config.DUMP_CHANNEL_ID,
+                            document=file_path,
+                            caption=f"🎥 **Title:** {title}\n🔗 **Video ID:** `{vidid}`"
+                        )
+                        # ID ko database me save kar dega agli baar ke liye
+                        await save_cache(vidid, dump_msg.document.file_id)
+                    except Exception as e:
+                        pass # Agar channel upload me koi error aaye toh bhi gaana bajega
+            except:
+                raise AssistantErr(_["play_14"])
+        # ------------------------------------------------
+        # 🚀 AUTO-CACHE LOGIC END HERE
+        # ------------------------------------------------
+
         if await is_active_chat(chat_id):
             await put_queue(
                 chat_id,
@@ -210,6 +250,7 @@ async def stream(
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "stream"
+            
     elif streamtype == "soundcloud":
         file_path = result["filepath"]
         title = result["title"]
@@ -260,6 +301,7 @@ async def stream(
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
+            
     elif streamtype == "telegram":
         file_path = result["path"]
         link = result["link"]
@@ -312,6 +354,7 @@ async def stream(
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
+            
     elif streamtype == "live":
         link = result["link"]
         vidid = result["vidid"]
@@ -378,6 +421,7 @@ async def stream(
             )
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
+            
     elif streamtype == "index":
         link = result
         title = "ɪɴᴅᴇx ᴏʀ ᴍ3ᴜ8 ʟɪɴᴋ"
