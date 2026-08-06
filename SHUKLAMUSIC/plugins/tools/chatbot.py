@@ -1,19 +1,23 @@
+# -----------------------------------------------
+# 🔸 Pure AI Tsundere ChatBot (No Manual Keywords)
+# 🔹 Powered by OpenAI/OpenRouter API
+# -----------------------------------------------
 import re
 from pyrogram import filters
-from pyrogram.types import Message
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram import enums
 
 from openai import AsyncOpenAI
 
 from SHUKLAMUSIC import app
 from SHUKLAMUSIC.core.mongo import mongodb
-from SHUKLAMUSIC.utils.database import is_nonadmin_chat
 from SHUKLAMUSIC.misc import SUDOERS
 from config import BANNED_USERS, OWNER_ID
 
+# Sirf ON/OFF ka data save karne ke liye Mongo use hoga
 chatbot_settings = mongodb.chatbot_settings
-chatbot_replies = mongodb.chatbot_replies
 
+# --- AI API Configuration ---
 OPENAI_API_KEY = "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"
 
 ai_client = AsyncOpenAI(
@@ -21,154 +25,85 @@ ai_client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1" 
 )
 
-_E_ON = 6073371665381724173
-_E_OFF = 6073598306510967017
-_E_LEARN = 6073117703965511893
-_E_ERR = 5978715546865112655
-
-
-def e(eid, fb):
-    return f"<emoji id={eid}>{fb}</emoji>"
-
-
-CB_HELP = f"""
-{e(_E_LEARN,'💐')} <b>ChatBot — Command List</b>
-
-An auto-reply chatbot powered by MongoDB for custom keywords, with an AI API fallback for natural conversations.
-
-• <code>/chatbot on</code> — enable auto-replies in this chat
-• <code>/chatbot off</code> — disable auto-replies in this chat
-• <code>/teach &lt;keyword&gt; | &lt;reply&gt;</code> — teach the bot a new reply (admin only)
-• <code>/unlearn &lt;keyword&gt;</code> — remove a taught reply (admin only)
-• <code>/learned</code> — list everything the bot has learned in this chat
-"""
-
-
+# --- Helper Functions ---
 async def is_chatbot_enabled(chat_id: int) -> bool:
     doc = await chatbot_settings.find_one({"chat_id": chat_id})
     return bool(doc and doc.get("enabled"))
 
-
 async def set_chatbot_enabled(chat_id: int, enabled: bool):
     await chatbot_settings.update_one({"chat_id": chat_id}, {"$set": {"enabled": enabled}}, upsert=True)
 
-
-async def is_admin(client, message: Message) -> bool:
-    if message.sender_chat and message.sender_chat.id == message.chat.id:
-        return True
-    if not message.from_user:
-        return False
-    user_id = message.from_user.id
+async def is_admin(chat_id: int, user_id: int) -> bool:
     try:
         if user_id in SUDOERS or str(user_id) == str(OWNER_ID):
             return True
-    except Exception:
-        pass
-    try:
-        member = await client.get_chat_member(message.chat.id, user_id)
+        member = await app.get_chat_member(chat_id, user_id)
         return member.status in (enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER)
     except Exception:
         return False
 
-
-@app.on_message(filters.command("chatbothelp") & ~BANNED_USERS)
-async def chatbot_help_cmd(client, message: Message):
-    await message.reply_text(CB_HELP)
-
+# -----------------------------------------------
+# 🎛️ COMMANDS & BUTTONS (ON/OFF)
+# -----------------------------------------------
 
 @app.on_message(filters.command("chatbot") & filters.group & ~BANNED_USERS)
-async def chatbot_toggle_cmd(client, message: Message):
-    if len(message.command) != 2 or message.command[1].lower() not in ("on", "off"):
-        state = await is_chatbot_enabled(message.chat.id)
-        status = f"{e(_E_ON,'🥰')} <b>ON</b>" if state else f"{e(_E_OFF,'🐈')} <b>OFF</b>"
-        return await message.reply_text(
-            f"{e(_E_LEARN,'💐')} <b>ChatBot status:</b> {status}\n\nUsage: <code>/chatbot on</code> or <code>/chatbot off</code>"
-        )
-    if not await is_admin(client, message):
-        return await message.reply_text(f"{e(_E_ERR,'🚩')} Only group admins can toggle the chatbot.")
-    state = message.command[1].lower() == "on"
-    await set_chatbot_enabled(message.chat.id, state)
-    if state:
-        await message.reply_text(f"{e(_E_ON,'🥰')} <b>ChatBot enabled</b> — I will now auto-reply (using AI & keywords) in this chat.")
-    else:
-        await message.reply_text(f"{e(_E_OFF,'🐈')} <b>ChatBot disabled</b> for this chat.")
-
-
-@app.on_message(filters.command("teach") & filters.group & ~BANNED_USERS)
-async def teach_cmd(client, message: Message):
-    if not await is_admin(client, message):
-        return await message.reply_text(f"{e(_E_ERR,'🚩')} Only group admins can teach the chatbot.")
-    if len(message.command) < 2 or "|" not in message.text:
-        return await message.reply_text(f"{e(_E_ERR,'🚩')} Usage: <code>/teach keyword | reply text</code>")
-    raw = message.text.split(None, 1)[1]
-    if "|" not in raw:
-        return await message.reply_text(f"{e(_E_ERR,'🚩')} Usage: <code>/teach keyword | reply text</code>")
-    keyword, reply = raw.split("|", 1)
-    keyword = keyword.strip().lower()
-    reply = reply.strip()
-    if not keyword or not reply:
-        return await message.reply_text(f"{e(_E_ERR,'🚩')} Both keyword and reply are required.")
-    await chatbot_replies.update_one(
-        {"chat_id": message.chat.id, "keyword": keyword},
-        {"$set": {"reply": reply}},
-        upsert=True,
+async def chatbot_menu(client, message: Message):
+    if not await is_admin(message.chat.id, message.from_user.id):
+        return await message.reply_text("🚩 Only group admins can use this command, Baka!")
+    
+    is_on = await is_chatbot_enabled(message.chat.id)
+    status_text = "🟢 **ON**" if is_on else "🔴 **OFF**"
+    
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Turn ON", callback_data="cb_on"),
+            InlineKeyboardButton("Turn OFF", callback_data="cb_off")
+        ]
+    ])
+    
+    await message.reply_text(
+        f"🤖 **Baka ChatBot Settings**\n\n"
+        f"**Current Status:** {status_text}\n\n"
+        f"Choose an option below:",
+        reply_markup=keyboard
     )
-    await message.reply_text(f"{e(_E_LEARN,'💐')} Learned! When someone says <b>{keyword}</b>, I'll reply with that text.")
 
+@app.on_callback_query(filters.regex(r"^cb_(on|off)$") & ~BANNED_USERS)
+async def chatbot_callback(client, query: CallbackQuery):
+    if not await is_admin(query.message.chat.id, query.from_user.id):
+        return await query.answer("Huh! Only admins can touch my settings, Baka!", show_alert=True)
 
-@app.on_message(filters.command("unlearn") & filters.group & ~BANNED_USERS)
-async def unlearn_cmd(client, message: Message):
-    if not await is_admin(client, message):
-        return await message.reply_text(f"{e(_E_ERR,'🚩')} Only group admins can do this.")
-    if len(message.command) < 2:
-        return await message.reply_text(f"{e(_E_ERR,'🚩')} Usage: <code>/unlearn keyword</code>")
-    keyword = message.text.split(None, 1)[1].strip().lower()
-    result = await chatbot_replies.delete_one({"chat_id": message.chat.id, "keyword": keyword})
-    if result.deleted_count:
-        await message.reply_text(f"{e(_E_ON,'🥰')} Forgot the reply for <b>{keyword}</b>.")
+    action = query.data.split("_")[1]
+    
+    if action == "on":
+        await set_chatbot_enabled(query.message.chat.id, True)
+        await query.message.edit_text("✅ **Baka ChatBot is now ENABLED!**\nGet ready for some attitude! 💅")
     else:
-        await message.reply_text(f"{e(_E_ERR,'🚩')} No learned reply found for that keyword.")
+        await set_chatbot_enabled(query.message.chat.id, False)
+        await query.message.edit_text("💤 **Baka ChatBot is DISABLED.**\nFine, I didn't want to talk to you anyway! 😤")
+        
+    await query.answer("Settings Updated!")
 
 
-@app.on_message(filters.command("learned") & filters.group & ~BANNED_USERS)
-async def learned_cmd(client, message: Message):
-    cursor = chatbot_replies.find({"chat_id": message.chat.id}).limit(50)
-    keywords = [doc["keyword"] async for doc in cursor]
-    if not keywords:
-        return await message.reply_text("I haven't learned any custom keywords in this chat yet. Teach me with /teach.")
-    text = f"{e(_E_LEARN,'💐')} <b>Learned keywords in this chat:</b>\n\n" + ", ".join(f"<code>{k}</code>" for k in keywords)
-    await message.reply_text(text)
+# -----------------------------------------------
+# 🗣️ MAIN AI CHAT LOGIC
+# -----------------------------------------------
 
-
-@app.on_message(filters.group & filters.text & ~filters.bot & ~filters.command(["teach", "unlearn", "learned", "chatbot", "chatbothelp"]) & ~BANNED_USERS, group=20)
+@app.on_message(filters.group & filters.text & ~filters.bot & ~filters.command(["chatbot"]) & ~BANNED_USERS, group=20)
 async def chatbot_auto_reply(client, message: Message):
-    if not message.text or message.text.startswith("/"):
+    # Ignore commands or prefixes
+    if not message.text or message.text.startswith(("/", "!", "?", ".")):
         return
+    
+    # Check if chatbot is ON in this group
     if not await is_chatbot_enabled(message.chat.id):
         return
-    
-    text = message.text.strip().lower()
-    text_clean = re.sub(r"[^\w\s]", "", text)
-
-    doc = await chatbot_replies.find_one({"chat_id": message.chat.id, "keyword": text})
-    if not doc:
-        doc = await chatbot_replies.find_one({"chat_id": message.chat.id, "keyword": text_clean})
-    if not doc:
-        cursor = chatbot_replies.find({"chat_id": message.chat.id})
-        async for candidate in cursor:
-            if candidate["keyword"] in text_clean.split() or candidate["keyword"] in text_clean:
-                doc = candidate
-                break
-    
-    if doc:
-        try:
-            return await message.reply_text(doc["reply"])
-        except Exception:
-            return
 
     try:
+        # Show typing status
         await app.send_chat_action(message.chat.id, enums.ChatAction.TYPING)
         
+        # Baka Bot System Prompt
         system_prompt = (
             "You are a Tsundere anime-style Telegram group member from India. "
             "Always reply in very short, casual Hinglish (Hindi + English). "
@@ -180,17 +115,19 @@ async def chatbot_auto_reply(client, message: Message):
             "Keep your replies strictly to 1 short line."
         )
 
+        # Call OpenAI / OpenRouter API
         response = await ai_client.chat.completions.create(
             model="openai/gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": message.text}
             ],
-            max_tokens=40,
-            temperature=0.85 
+            max_tokens=40,    # Keeps replies short
+            temperature=0.85  # Attitude variations
         )
         
         ai_reply = response.choices[0].message.content
+        
         if ai_reply:
             await message.reply_text(ai_reply)
             
