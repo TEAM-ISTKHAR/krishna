@@ -1,7 +1,3 @@
-# -----------------------------------------------
-# 🔸 StrangerMusic Project — MongoDB + AI ChatBot
-# 🔹 Keyword-trained auto-reply + OpenAI/OpenRouter API Fallback
-# -----------------------------------------------
 import re
 from pyrogram import filters
 from pyrogram.types import Message
@@ -18,21 +14,17 @@ from config import BANNED_USERS, OWNER_ID
 chatbot_settings = mongodb.chatbot_settings
 chatbot_replies = mongodb.chatbot_replies
 
-# --- AI API Configuration ---
 OPENAI_API_KEY = "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"
 
-# Using OpenRouter base_url since the key starts with 'sk-or-'. 
-# Remove base_url if you switch to a standard OpenAI key.
 ai_client = AsyncOpenAI(
     api_key=OPENAI_API_KEY,
     base_url="https://openrouter.ai/api/v1" 
 )
-# ----------------------------
 
-_E_ON = 6073371665381724173     # 🥰 emoji_2e47b
-_E_OFF = 6073598306510967017    # 🐈 emoji_2e47b
-_E_LEARN = 6073117703965511893  # 💐 emoji_2e47b
-_E_ERR = 5978715546865112655    # 🚩
+_E_ON = 6073371665381724173
+_E_OFF = 6073598306510967017
+_E_LEARN = 6073117703965511893
+_E_ERR = 5978715546865112655
 
 
 def e(eid, fb):
@@ -158,7 +150,6 @@ async def chatbot_auto_reply(client, message: Message):
     text = message.text.strip().lower()
     text_clean = re.sub(r"[^\w\s]", "", text)
 
-    # 1. Check for custom learned keywords in MongoDB first
     doc = await chatbot_replies.find_one({"chat_id": message.chat.id, "keyword": text})
     if not doc:
         doc = await chatbot_replies.find_one({"chat_id": message.chat.id, "keyword": text_clean})
@@ -169,34 +160,34 @@ async def chatbot_auto_reply(client, message: Message):
                 doc = candidate
                 break
     
-    # If custom keyword is found, reply and exit
     if doc:
         try:
             return await message.reply_text(doc["reply"])
         except Exception:
             return
 
-    # 2. AI Fallback: Generate natural Hinglish response
     try:
         await app.send_chat_action(message.chat.id, enums.ChatAction.TYPING)
         
         system_prompt = (
-            "You are a normal, cool Telegram group member from India. "
+            "You are a Tsundere anime-style Telegram group member from India. "
             "Always reply in very short, casual Hinglish (Hindi + English). "
-            "Talk like a normal human friend. Use natural emojis like 😂, 😭, ya 💀. "
-            "NEVER say you are an AI, bot, or assistant. NEVER say 'Main madad kar sakta hoon'. "
-            "If someone asks who your owner is, say 'My owner is my developer'. "
+            "You have a tsundere personality: act slightly annoyed, bossy, and always use words like 'Baka', 'Huh', 'Duffer', or 'Chup kar'. "
+            "Never be too sweet directly, but show you care deep down. "
+            "Use emojis like 🙄, 😤, 💢, 🤨, 💅. "
+            "NEVER say you are an AI, bot, or assistant. NEVER be overly polite. "
+            "If someone asks who your owner is, say 'My owner is my developer, Baka!'. "
             "Keep your replies strictly to 1 short line."
         )
 
         response = await ai_client.chat.completions.create(
-            model="openai/gpt-3.5-turbo", # Change to "gpt-3.5-turbo" if not using OpenRouter
+            model="openai/gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": message.text}
             ],
-            max_tokens=40,    # Prevents long paragraphs
-            temperature=0.8   # Natural human-like randomness
+            max_tokens=40,
+            temperature=0.85 
         )
         
         ai_reply = response.choices[0].message.content
@@ -205,4 +196,3 @@ async def chatbot_auto_reply(client, message: Message):
             
     except Exception as e:
         print(f"AI Chatbot Error: {e}")
-        
