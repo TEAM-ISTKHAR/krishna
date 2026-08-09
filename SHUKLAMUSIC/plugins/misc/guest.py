@@ -7,7 +7,7 @@ from pyrogram.types import (
     Message,
 )
 
-from Music import app
+from SHUKLAMUSIC import app
 
 
 # ==========================================================
