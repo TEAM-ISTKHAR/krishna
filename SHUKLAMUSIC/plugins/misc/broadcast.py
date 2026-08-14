@@ -1,20 +1,15 @@
-# -----------------------------------------------
-# 🔸 StrangerMusic Project
-# 🔹 Developed & Maintained by: Shashank Shukla (https://github.com/itzshukla)
-# 📅 Copyright © 2022 – All Rights Reserved
-#
-# 📖 License:
-# This source code is open for educational and non-commercial use ONLY.
-# You are required to retain this credit in all copies or substantial portions of this file.
-# Commercial use, redistribution, or removal of this notice is strictly prohibited
-# without prior written permission from the author.
-#
-# ❤️ Made with dedication and love by ItzShukla
-# -----------------------------------------------
 import asyncio
+import time
+from datetime import datetime
+import pytz
+
 from pyrogram import filters
 from pyrogram.enums import ChatMembersFilter
 from pyrogram.errors import FloodWait
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from motor.motor_asyncio import AsyncIOMotorClient
+
 from SHUKLAMUSIC import app
 from SHUKLAMUSIC.misc import SUDOERS
 from SHUKLAMUSIC.utils.database import (
@@ -26,11 +21,70 @@ from SHUKLAMUSIC.utils.database import (
 )
 from SHUKLAMUSIC.utils.decorators.language import language
 from SHUKLAMUSIC.utils.formatters import alpha_to_int
-from config import adminlist
+
+# Make sure MONGO_DB_URI and LOGGER_ID are imported from your config
+from config import adminlist, MONGO_DB_URI, LOGGER_ID
 
 IS_BROADCASTING = False
 
+# ==========================================
+# SELF PROMO DATABASE & HELPER SETUP
+# ==========================================
+dbclient = AsyncIOMotorClient(MONGO_DB_URI)
+db = dbclient.ShuklaMusic  # DB Name changed to match your bot vibe
+promo_msgs_db = db.promo_messages
+promo_toggle_db = db.promo_settings
 
+def get_progress_bar(current, total, length=20):
+    if total == 0:
+        return "▱" * length
+    percent = current / total
+    filled_len = int(length * percent)
+    bar = "▰" * filled_len + "▱" * (length - filled_len)
+    return bar
+
+async def is_promo_on() -> bool:
+    chat = await promo_toggle_db.find_one({"_id": "promo_toggle"})
+    if not chat:
+        return False
+    return chat.get("status", False)
+
+async def set_promo_status(status: bool):
+    await promo_toggle_db.update_one({"_id": "promo_toggle"}, {"$set": {"status": status}}, upsert=True)
+
+async def save_promo_msg(chat_id: int, message_id: int):
+    await promo_msgs_db.insert_one({"chat_id": chat_id, "message_id": message_id, "timestamp": int(time.time())})
+
+async def get_old_promo_msgs():
+    time_limit = int(time.time()) - 172800 # 48 hours purane messages
+    return promo_msgs_db.find({"timestamp": {"$lt": time_limit}})
+
+async def delete_promo_record(chat_id: int, message_id: int):
+    await promo_msgs_db.delete_one({"chat_id": chat_id, "message_id": message_id})
+
+
+# ==========================================
+# SELF PROMO ASSETS
+# ==========================================
+PROMO_IMAGE = "https://n.uguu.se/xYzKKWzr.jpg"
+PROMO_TEXT = """
+<tg-emoji emoji-id="6172312314423808834">✨</tg-emoji> ᴛʜɪꜱ ɪꜱ [ 🎀 ᴋᴀᴠʏᴀ ᴍᴜꜱɪᴄ 🎀 ](https://t.me/Kavya_Music_Robot)
+
+<tg-emoji emoji-id="6271537028307881531">💎</tg-emoji> ᴧ ᴘʀєᴍɪᴜᴍ ᴅєꜱɪɢηєᴅ ϻᴜꜱɪᴄ ᴘʟᴧʏєʀ ʙσᴛ ꜰσʀ ᴛєʟєɢʀᴧϻ ɢʀσᴜᴘ & ᴄʜᴧηηєʟ. 
+<tg-emoji emoji-id="6082387600599944892">🎧</tg-emoji> 24x7 ᴍᴜꜱɪᴄ • ꜱᴍᴏᴏᴛʜ ᴀɴᴅ ꜰᴀꜱᴛ ᴘʟᴀʏʙᴀᴄᴋ
+
+<tg-emoji emoji-id="6100220081474639964">⚡️</tg-emoji> ᴇɴᴊᴏʏ ᴜɴʟɪᴍɪᴛᴇᴅ ꜱᴏɴɢꜱ, qᴜɪᴄᴋ ʀᴇꜱᴘᴏɴꜱᴇ, ᴀɴᴅ ᴄʟᴇᴀʀ ᴀᴜᴅɪᴏ ɪɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ.
+
+<tg-emoji emoji-id="6100424015111787987">📌</tg-emoji> ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ, ᴍᴀᴋᴇ ᴍᴇ ᴀᴅᴍɪɴ, ᴀɴᴅ ꜱᴇɴᴅ /play song name ᴛᴏ ꜱᴛᴀʀᴛ ᴛʜᴇ ᴍᴜꜱɪᴄ.
+"""
+PROMO_BUTTON = InlineKeyboardMarkup(
+    [[InlineKeyboardButton("✨ Aᴅᴅ ᴍᴇ ɪɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ ✨", url="https://t.me/Kavya_Music_Robot?startgroup=true")]]
+)
+
+
+# ==========================================
+# EXISTING REGULAR BROADCAST MODULE
+# ==========================================
 @app.on_message(filters.command("broadcast") & SUDOERS)
 @language
 async def braodcast_message(client, message, _):
@@ -157,6 +211,106 @@ async def braodcast_message(client, message, _):
     IS_BROADCASTING = False
 
 
+# ==========================================
+# SELF PROMO RUN LOGIC
+# ==========================================
+async def run_promo_broadcast(status_message=None):
+    users = await get_served_users()
+    chats = await get_served_chats()
+
+    total_users = len(users)
+    total_chats = len(chats)
+    total_targets = total_users + total_chats
+
+    u_success, u_failed = 0, 0
+    g_success, g_failed = 0, 0
+    completed = 0
+
+    async def update_progress():
+        if status_message and completed % 10 == 0: 
+            bar = get_progress_bar(completed, total_targets)
+            percent = int((completed / total_targets) * 100) if total_targets else 100
+            text = (
+                f"<tg-emoji emoji-id=\"5373310679241466020\">🌀</tg-emoji> **Live Promo Broadcasting...**\n\n"
+                f"[{bar}] **{percent}%**\n\n"
+                f"<tg-emoji emoji-id=\"6032609071373226027\">👥</tg-emoji> **Users:** ✅ {u_success} | ❌ {u_failed}\n"
+                f"<tg-emoji emoji-id=\"6021618194228187816\">💬</tg-emoji> **Groups:** ✅ {g_success} | ❌ {g_failed}"
+            )
+            try:
+                await status_message.edit_text(text)
+            except Exception:
+                pass
+
+    for user in users:
+        user_id = user["user_id"] if isinstance(user, dict) else user
+        try:
+            msg = await app.send_photo(chat_id=int(user_id), photo=PROMO_IMAGE, caption=PROMO_TEXT, reply_markup=PROMO_BUTTON)
+            await save_promo_msg(int(user_id), msg.id)
+            u_success += 1
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
+        except Exception:
+            u_failed += 1
+        completed += 1
+        await update_progress()
+        await asyncio.sleep(0.5)
+
+    for chat in chats:
+        chat_id = chat["chat_id"] if isinstance(chat, dict) else chat
+        try:
+            msg = await app.send_photo(chat_id=int(chat_id), photo=PROMO_IMAGE, caption=PROMO_TEXT, reply_markup=PROMO_BUTTON)
+            await save_promo_msg(int(chat_id), msg.id)
+            g_success += 1
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
+        except Exception:
+            g_failed += 1
+        completed += 1
+        await update_progress()
+        await asyncio.sleep(0.5)
+
+    return u_success, u_failed, g_success, g_failed
+
+
+@app.on_message(filters.command(["selfpromo", "promo"]) & SUDOERS)
+async def promo_toggle_cmd(client, message):
+    if len(message.command) != 2:
+        return await message.reply_text(
+            "<tg-emoji emoji-id=\"5767288287001580715\">💡</tg-emoji> **Usage Options:**\n"
+            "`/selfpromo on` - Start auto broadcast (7AM, 1PM, 7PM)\n"
+            "`/selfpromo off` - Stop auto broadcast\n"
+            "`/selfpromo run` - Instantly broadcast right now"
+        )
+    
+    state = message.command[1].lower()
+    
+    if state == "on":
+        await set_promo_status(True)
+        await message.reply_text("✅ **Auto Self Promo Started!**\nBot will broadcast daily at 7 AM, 1 PM, and 7 PM (IST).")
+    elif state == "off":
+        await set_promo_status(False)
+        await message.reply_text("❌ **Auto Self Promo Stopped!**")
+    elif state == "run":
+        status_msg = await message.reply_text("<tg-emoji emoji-id=\"5373310679241466020\">🌀</tg-emoji> **Calculating stats & initializing broadcast...**")
+        try:
+            u_success, u_failed, g_success, g_failed = await run_promo_broadcast(status_message=status_msg)
+            stats_text = (
+                f"<tg-emoji emoji-id=\"6039381989985882045\">📢</tg-emoji> **Manual Promo Completed** ✅\n\n"
+                f"<tg-emoji emoji-id=\"6032609071373226027\">👥</tg-emoji> **Users:** ✅ {u_success} | ❌ {u_failed}\n"
+                f"<tg-emoji emoji-id=\"6021618194228187816\">💬</tg-emoji> **Groups:** ✅ {g_success} | ❌ {g_failed}"
+            )
+            await status_msg.edit_text(stats_text)
+            if LOGGER_ID:
+                await app.send_message(LOGGER_ID, stats_text)
+        except Exception as e:
+            await status_msg.edit_text(f"❌ Error: {e}")
+    else:
+        await message.reply_text("⚠️ **Invalid argument.** Use `on`, `off`, or `run`.")
+
+
+# ==========================================
+# BACKGROUND TASKS
+# ==========================================
 async def auto_clean():
     while not await asyncio.sleep(10):
         try:
@@ -176,5 +330,42 @@ async def auto_clean():
         except:
             continue
 
+async def auto_promo_task():
+    tz = pytz.timezone("Asia/Kolkata") # Indian Standard Time
+    last_run_hour = -1
 
+    while True:
+        try:
+            old_messages = await get_old_promo_msgs()
+            async for doc in old_messages:
+                try:
+                    await app.delete_messages(chat_id=doc["chat_id"], message_ids=doc["message_id"])
+                except:
+                    pass
+                await delete_promo_record(doc["chat_id"], doc["message_id"])
+                await asyncio.sleep(1)
+
+            if await is_promo_on():
+                now = datetime.now(tz)
+                
+                # Check for 7 AM, 1 PM (13), or 7 PM (19) 
+                if now.hour in [7, 13, 19] and now.hour != last_run_hour:
+                    u_success, u_failed, g_success, g_failed = await run_promo_broadcast()
+                    last_run_hour = now.hour
+                    
+                    if LOGGER_ID:
+                        stats_text = (
+                            f"<tg-emoji emoji-id=\"6039381989985882045\">📢</tg-emoji> **Scheduled Promo Completed ({now.strftime('%I:%M %p')})**\n\n"
+                            f"<tg-emoji emoji-id=\"6032609071373226027\">👥</tg-emoji> **Users:** ✅ {u_success} | ❌ {u_failed}\n"
+                            f"<tg-emoji emoji-id=\"6021618194228187816\">💬</tg-emoji> **Groups:** ✅ {g_success} | ❌ {g_failed}"
+                        )
+                        await app.send_message(LOGGER_ID, stats_text)
+                        
+        except Exception as e:
+            print(f"Promo Error: {e}")
+            
+        await asyncio.sleep(300) # Check every 5 minutes
+
+# Dono tasks start karna zaroori hai
 asyncio.create_task(auto_clean())
+asyncio.create_task(auto_promo_task())
