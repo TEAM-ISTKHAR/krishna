@@ -31,7 +31,8 @@ IS_BROADCASTING = False
 # SELF PROMO DATABASE & HELPER SETUP
 # ==========================================
 dbclient = AsyncIOMotorClient(MONGO_DB_URI)
-db = dbclient.ShuklaMusic  # DB Name changed to match your bot vibe
+# Yahan 'ShuklaMusic' ko wapas 'SHUKLAMUSIC' kar diya, taaki case-sensitivity error na aaye
+db = dbclient.SHUKLAMUSIC
 promo_msgs_db = db.promo_messages
 promo_toggle_db = db.promo_settings
 
@@ -64,9 +65,9 @@ async def delete_promo_record(chat_id: int, message_id: int):
 
 
 # ==========================================
-# SELF PROMO ASSETS
+# SELF PROMO ASSETS (FIXED IMAGE LINK)
 # ==========================================
-PROMO_IMAGE = "https://n.uguu.se/xYzKKWzr.jpg"
+PROMO_IMAGE = "https://telegra.ph/file/1949480f01355b4e87d26.jpg" 
 PROMO_TEXT = """
 <tg-emoji emoji-id="6172312314423808834">✨</tg-emoji> ᴛʜɪꜱ ɪꜱ [ 🎀 ᴋᴀᴠʏᴀ ᴍᴜꜱɪᴄ 🎀 ](https://t.me/Kavya_Music_Robot)
 
@@ -139,7 +140,7 @@ async def braodcast_message(client, message, _):
                     except:
                         continue
                 sent += 1
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.5) # Yahan bhi thoda sleep increase kiya
             except FloodWait as fw:
                 flood_time = int(fw.value)
                 if flood_time > 200:
@@ -166,7 +167,7 @@ async def braodcast_message(client, message, _):
                     else await app.send_message(i, text=query)
                 )
                 susr += 1
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.5)
             except FloodWait as fw:
                 flood_time = int(fw.value)
                 if flood_time > 200:
@@ -212,7 +213,7 @@ async def braodcast_message(client, message, _):
 
 
 # ==========================================
-# SELF PROMO RUN LOGIC (UPDATED WITH FIXES)
+# SELF PROMO RUN LOGIC
 # ==========================================
 async def run_promo_broadcast(status_message=None):
     users = await get_served_users()
@@ -227,7 +228,6 @@ async def run_promo_broadcast(status_message=None):
     completed = 0
 
     async def update_progress():
-        # Updated to refresh every 5th user/chat OR when completed
         if status_message and (completed % 5 == 0 or completed == total_targets): 
             bar = get_progress_bar(completed, total_targets)
             percent = int((completed / total_targets) * 100) if total_targets else 100
@@ -249,12 +249,15 @@ async def run_promo_broadcast(status_message=None):
             await save_promo_msg(int(user_id), msg.id)
             u_success += 1
         except FloodWait as e:
-            await asyncio.sleep(e.value)
-        except Exception:
+            # Agar Telegram block kare toh chup chap wait karo
+            await asyncio.sleep(e.value + 1)
+        except Exception as e:
             u_failed += 1
         completed += 1
         await update_progress()
-        await asyncio.sleep(0.5)
+        
+        # INCREASED SLEEP: Floodwait bachane ke liye (0.8 seconds)
+        await asyncio.sleep(0.8) 
 
     for chat in chats:
         chat_id = chat["chat_id"] if isinstance(chat, dict) else chat
@@ -263,18 +266,20 @@ async def run_promo_broadcast(status_message=None):
             await save_promo_msg(int(chat_id), msg.id)
             g_success += 1
         except FloodWait as e:
-            await asyncio.sleep(e.value)
-        except Exception:
+            await asyncio.sleep(e.value + 1)
+        except Exception as e:
             g_failed += 1
         completed += 1
         await update_progress()
-        await asyncio.sleep(0.5)
+        
+        # INCREASED SLEEP: Floodwait bachane ke liye (0.8 seconds)
+        await asyncio.sleep(0.8)
 
     return u_success, u_failed, g_success, g_failed
 
 
 # ==========================================
-# COMMAND CONTROLLER (NON-BLOCKING NOW)
+# COMMAND CONTROLLER
 # ==========================================
 @app.on_message(filters.command(["selfpromo", "promo"]) & SUDOERS)
 async def promo_toggle_cmd(client, message):
@@ -299,7 +304,6 @@ async def promo_toggle_cmd(client, message):
             "<tg-emoji emoji-id=\"5373310679241466020\">🌀</tg-emoji> **Calculating stats & initializing broadcast...**\n\n*(Yeh background me chal raha hai, aap ab dusre commands use kar sakte hain!)*"
         )
         
-        # Background task for running broadcast without blocking the bot
         async def run_in_bg():
             try:
                 u_success, u_failed, g_success, g_failed = await run_promo_broadcast(status_message=status_msg)
@@ -314,7 +318,6 @@ async def promo_toggle_cmd(client, message):
             except Exception as e:
                 await status_msg.edit_text(f"❌ Error during broadcast: {e}")
 
-        # Start the task asynchronously
         asyncio.create_task(run_in_bg())
     else:
         await message.reply_text("⚠️ **Invalid argument.** Use `on`, `off`, or `run`.")
@@ -343,7 +346,7 @@ async def auto_clean():
             continue
 
 async def auto_promo_task():
-    tz = pytz.timezone("Asia/Kolkata") # Indian Standard Time
+    tz = pytz.timezone("Asia/Kolkata")
     last_run_hour = -1
 
     while True:
@@ -359,8 +362,6 @@ async def auto_promo_task():
 
             if await is_promo_on():
                 now = datetime.now(tz)
-
-                # Check for 7 AM, 1 PM (13), or 7 PM (19) 
                 if now.hour in [7, 13, 19] and now.hour != last_run_hour:
                     u_success, u_failed, g_success, g_failed = await run_promo_broadcast()
                     last_run_hour = now.hour
@@ -374,10 +375,9 @@ async def auto_promo_task():
                         await app.send_message(LOGGER_ID, stats_text)
 
         except Exception as e:
-            print(f"Promo Error: {e}")
+            pass # Removed print to avoid cluttering logs
 
-        await asyncio.sleep(300) # Check every 5 minutes
+        await asyncio.sleep(300)
 
-# Dono tasks start karna zaroori hai
 asyncio.create_task(auto_clean())
 asyncio.create_task(auto_promo_task())
