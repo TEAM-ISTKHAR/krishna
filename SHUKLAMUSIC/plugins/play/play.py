@@ -12,7 +12,7 @@ from SHUKLAMUSIC.utils.channelplay import get_channeplayCB
 from SHUKLAMUSIC.utils.decorators.language import languageCB
 from SHUKLAMUSIC.utils.decorators.play import PlayWrapper
 from SHUKLAMUSIC.utils.formatters import formats
-from SHUKLAMUSIC.utils.exceptions import AssistantErr  # 🛠️ FIXED: Missing import added
+from SHUKLAMUSIC.utils.exceptions import AssistantErr
 from SHUKLAMUSIC.utils.inline import (
     botplaylist_markup,
     livestream_markup,
@@ -62,7 +62,7 @@ async def play_commnd(
         if message.reply_to_message
         else None
     )
-    
+
     if audio_telegram:
         if audio_telegram.file_size > 104857600:
             return await mystic.edit_text(_["play_5"])
@@ -101,7 +101,7 @@ async def play_commnd(
                 return await mystic.edit_text(err)
             return await mystic.delete()
         return
-        
+
     elif video_telegram:
         if message.reply_to_message.document:
             try:
@@ -146,7 +146,7 @@ async def play_commnd(
                 return await mystic.edit_text(err)
             return await mystic.delete()
         return
-        
+
     elif url:
         if await YouTube.exists(url):
             if "playlist" in url:
@@ -170,6 +170,7 @@ async def play_commnd(
             elif "https://youtu.be" in url:
                 videoid = url.split("/")[-1].split("?")[0]
                 details, track_id = await YouTube.track(f"https://www.youtube.com/watch?v={videoid}")
+                if not details: return await mystic.edit_text(_["play_3"])
                 streamtype = "youtube"
                 img = details["thumb"]
                 cap = _["play_11"].format(
@@ -182,6 +183,7 @@ async def play_commnd(
                 except Exception as e:
                     print(e)
                     return await mystic.edit_text(_["play_3"])
+                if not details: return await mystic.edit_text(_["play_3"])
                 streamtype = "youtube"
                 img = details["thumb"]
                 cap = _["play_11"].format(
@@ -199,6 +201,7 @@ async def play_commnd(
                     details, track_id = await Spotify.track(url)
                 except Exception:
                     return await mystic.edit_text(_["play_3"])
+                if not details: return await mystic.edit_text(_["play_3"])
                 streamtype = "youtube"
                 img = details["thumb"]
                 cap = _["play_10"].format(details["title"], details["duration_min"])
@@ -237,6 +240,7 @@ async def play_commnd(
                     details, track_id = await Apple.track(url)
                 except Exception:
                     return await mystic.edit_text(_["play_3"])
+                if not details: return await mystic.edit_text(_["play_3"])
                 streamtype = "youtube"
                 img = details["thumb"]
                 cap = _["play_10"].format(details["title"], details["duration_min"])
@@ -257,6 +261,7 @@ async def play_commnd(
                 details, track_id = await Resso.track(url)
             except Exception:
                 return await mystic.edit_text(_["play_3"])
+            if not details: return await mystic.edit_text(_["play_3"])
             streamtype = "youtube"
             img = details["thumb"]
             cap = _["play_10"].format(details["title"], details["duration_min"])
@@ -265,6 +270,7 @@ async def play_commnd(
                 details, track_path = await SoundCloud.download(url)
             except Exception:
                 return await mystic.edit_text(_["play_3"])
+            if not details: return await mystic.edit_text(_["play_3"])
             duration_sec = details["duration_sec"]
             if duration_sec > config.DURATION_LIMIT:
                 return await mystic.edit_text(
@@ -335,16 +341,22 @@ async def play_commnd(
             details, track_id = await YouTube.track(query)
         except Exception:
             return await mystic.edit_text(_["play_3"])
+            
+        if not details:
+            return await mystic.edit_text(_["play_3"])
+            
         streamtype = "youtube"
-        
+
     if str(playmode) == "Direct":
         if not plist_type:
-            if details["duration_min"]:
+            if details and details.get("duration_min"):
                 duration_sec = time_to_seconds(details["duration_min"])
                 if duration_sec > config.DURATION_LIMIT:
                     return await mystic.edit_text(
                         _["play_6"].format(config.DURATION_LIMIT_MIN, app.mention)
                     )
+            elif not details:
+                return await mystic.edit_text(_["play_3"])
             else:
                 buttons = livestream_markup(
                     _,
@@ -435,8 +447,6 @@ async def play_commnd(
                     reply_markup=InlineKeyboardMarkup(buttons),
                 )
                 return await play_logs(message, streamtype=f"URL Searched Inline")
-
-
 @app.on_callback_query(filters.regex("MusicStream") & ~BANNED_USERS)
 @languageCB
 async def play_music(client, CallbackQuery, _):
@@ -465,7 +475,11 @@ async def play_music(client, CallbackQuery, _):
         details, track_id = await YouTube.track(vidid, True)
     except Exception:
         return await mystic.edit_text(_["play_3"])
-    if details["duration_min"]:
+        
+    if not details:
+        return await mystic.edit_text(_["play_3"])
+        
+    if details.get("duration_min"):
         duration_sec = time_to_seconds(details["duration_min"])
         if duration_sec > config.DURATION_LIMIT:
             return await mystic.edit_text(
