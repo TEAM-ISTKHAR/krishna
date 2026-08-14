@@ -26,9 +26,6 @@ from SHUKLAMUSIC.utils.pastebin import SHUKLABin
 from SHUKLAMUSIC.utils.stream.queue import put_queue, put_queue_index
 from SHUKLAMUSIC.utils.thumbnails import get_thumb
 
-# Naye database file se import
-from SHUKLAMUSIC.core.cachedb import get_cache, save_cache
-
 
 async def stream(
     _,
@@ -154,25 +151,11 @@ async def stream(
         thumbnail = result["thumb"]
         status = True if video else None
 
-        cached_file_id = await get_cache(vidid)
+        try:
+            file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
+        except:
+            raise AssistantErr(_["play_14"])
 
-        if cached_file_id:
-            try:
-                await mystic.edit_text("⚡ **Fast Downloading from Telegram Cache...**")
-                file_path = await app.download_media(cached_file_id)
-                direct = True
-            except Exception:
-                try:
-                    file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
-                except:
-                    raise AssistantErr(_["play_14"])
-        else:
-            try:
-                file_path, direct = await YouTube.download(vidid, mystic, videoid=True, video=status)
-            except:
-                raise AssistantErr(_["play_14"])
-
-        # Pehle gaana Voice Chat me laga diya aur User ko message bhej diya
         if await is_active_chat(chat_id):
             await put_queue(
                 chat_id,
