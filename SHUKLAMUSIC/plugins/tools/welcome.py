@@ -1,16 +1,3 @@
-# -----------------------------------------------
-# 🔸 StrangerMusic Project
-# 🔹 Developed & Maintained by: Shukla (https://github.com/itzshukla)
-# 📅 Copyright © 2022 – All Rights Reserved
-#
-# 📖 License:
-# This source code is open for educational and non-commercial use ONLY.
-# You are required to retain this credit in all copies or substantial portions of this file.
-# Commercial use, redistribution, or removal of this notice is strictly prohibited
-# without prior written permission from the author.
-#
-# ❤️ Made with dedication and love by ItzShukla
-# -----------------------------------------------
 from SHUKLAMUSIC import app
 from pyrogram.errors import RPCError
 from pyrogram.types import ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
@@ -101,10 +88,10 @@ def welcomepic(pic, user, chatname, id, uname, brightness_factor=1.3):
     pfp = pfp.resize((500, 500))
     draw = ImageDraw.Draw(background)
     font = ImageFont.truetype('SHUKLAMUSIC/assets/font.ttf', size=60)
-    
+
     # Updated ID position to (630, 450)
     draw.text((630, 450), f'ID: {id}', fill=(255, 255, 255), font=font)
-    
+
     # Updated PFP position to (48, 88)
     pfp_position = (48, 88)
     background.paste(pfp, pfp_position, pfp)
@@ -191,8 +178,8 @@ async def greet_new_member(_, member: ChatMemberUpdated):
 
             temp.MELCOW[f"welcome-{chat_id}"] = msg
 
-            # Auto-delete welcome message in 5 minutes (300 seconds)
-            await asyncio.sleep(300)
+            # Auto-delete welcome message in 2 minutes (120 seconds)
+            await asyncio.sleep(120)
             try:
                 await msg.delete()
             except:
