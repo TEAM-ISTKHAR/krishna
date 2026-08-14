@@ -212,7 +212,7 @@ async def braodcast_message(client, message, _):
 
 
 # ==========================================
-# SELF PROMO RUN LOGIC
+# SELF PROMO RUN LOGIC (UPDATED WITH FIXES)
 # ==========================================
 async def run_promo_broadcast(status_message=None):
     users = await get_served_users()
@@ -227,7 +227,8 @@ async def run_promo_broadcast(status_message=None):
     completed = 0
 
     async def update_progress():
-        if status_message and completed % 10 == 0: 
+        # Updated to refresh every 5th user/chat OR when completed
+        if status_message and (completed % 5 == 0 or completed == total_targets): 
             bar = get_progress_bar(completed, total_targets)
             percent = int((completed / total_targets) * 100) if total_targets else 100
             text = (
@@ -272,6 +273,9 @@ async def run_promo_broadcast(status_message=None):
     return u_success, u_failed, g_success, g_failed
 
 
+# ==========================================
+# COMMAND CONTROLLER (NON-BLOCKING NOW)
+# ==========================================
 @app.on_message(filters.command(["selfpromo", "promo"]) & SUDOERS)
 async def promo_toggle_cmd(client, message):
     if len(message.command) != 2:
@@ -281,9 +285,9 @@ async def promo_toggle_cmd(client, message):
             "`/selfpromo off` - Stop auto broadcast\n"
             "`/selfpromo run` - Instantly broadcast right now"
         )
-    
+
     state = message.command[1].lower()
-    
+
     if state == "on":
         await set_promo_status(True)
         await message.reply_text("✅ **Auto Self Promo Started!**\nBot will broadcast daily at 7 AM, 1 PM, and 7 PM (IST).")
@@ -291,19 +295,27 @@ async def promo_toggle_cmd(client, message):
         await set_promo_status(False)
         await message.reply_text("❌ **Auto Self Promo Stopped!**")
     elif state == "run":
-        status_msg = await message.reply_text("<tg-emoji emoji-id=\"5373310679241466020\">🌀</tg-emoji> **Calculating stats & initializing broadcast...**")
-        try:
-            u_success, u_failed, g_success, g_failed = await run_promo_broadcast(status_message=status_msg)
-            stats_text = (
-                f"<tg-emoji emoji-id=\"6039381989985882045\">📢</tg-emoji> **Manual Promo Completed** ✅\n\n"
-                f"<tg-emoji emoji-id=\"6032609071373226027\">👥</tg-emoji> **Users:** ✅ {u_success} | ❌ {u_failed}\n"
-                f"<tg-emoji emoji-id=\"6021618194228187816\">💬</tg-emoji> **Groups:** ✅ {g_success} | ❌ {g_failed}"
-            )
-            await status_msg.edit_text(stats_text)
-            if LOGGER_ID:
-                await app.send_message(LOGGER_ID, stats_text)
-        except Exception as e:
-            await status_msg.edit_text(f"❌ Error: {e}")
+        status_msg = await message.reply_text(
+            "<tg-emoji emoji-id=\"5373310679241466020\">🌀</tg-emoji> **Calculating stats & initializing broadcast...**\n\n*(Yeh background me chal raha hai, aap ab dusre commands use kar sakte hain!)*"
+        )
+        
+        # Background task for running broadcast without blocking the bot
+        async def run_in_bg():
+            try:
+                u_success, u_failed, g_success, g_failed = await run_promo_broadcast(status_message=status_msg)
+                stats_text = (
+                    f"<tg-emoji emoji-id=\"6039381989985882045\">📢</tg-emoji> **Manual Promo Completed** ✅\n\n"
+                    f"<tg-emoji emoji-id=\"6032609071373226027\">👥</tg-emoji> **Users:** ✅ {u_success} | ❌ {u_failed}\n"
+                    f"<tg-emoji emoji-id=\"6021618194228187816\">💬</tg-emoji> **Groups:** ✅ {g_success} | ❌ {g_failed}"
+                )
+                await status_msg.edit_text(stats_text)
+                if getattr(config, "LOGGER_ID", None):
+                    await app.send_message(LOGGER_ID, stats_text)
+            except Exception as e:
+                await status_msg.edit_text(f"❌ Error during broadcast: {e}")
+
+        # Start the task asynchronously
+        asyncio.create_task(run_in_bg())
     else:
         await message.reply_text("⚠️ **Invalid argument.** Use `on`, `off`, or `run`.")
 
@@ -347,12 +359,12 @@ async def auto_promo_task():
 
             if await is_promo_on():
                 now = datetime.now(tz)
-                
+
                 # Check for 7 AM, 1 PM (13), or 7 PM (19) 
                 if now.hour in [7, 13, 19] and now.hour != last_run_hour:
                     u_success, u_failed, g_success, g_failed = await run_promo_broadcast()
                     last_run_hour = now.hour
-                    
+
                     if LOGGER_ID:
                         stats_text = (
                             f"<tg-emoji emoji-id=\"6039381989985882045\">📢</tg-emoji> **Scheduled Promo Completed ({now.strftime('%I:%M %p')})**\n\n"
@@ -360,10 +372,10 @@ async def auto_promo_task():
                             f"<tg-emoji emoji-id=\"6021618194228187816\">💬</tg-emoji> **Groups:** ✅ {g_success} | ❌ {g_failed}"
                         )
                         await app.send_message(LOGGER_ID, stats_text)
-                        
+
         except Exception as e:
             print(f"Promo Error: {e}")
-            
+
         await asyncio.sleep(300) # Check every 5 minutes
 
 # Dono tasks start karna zaroori hai
